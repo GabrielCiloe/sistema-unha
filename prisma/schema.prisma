@@ -1,0 +1,207 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum AppointmentStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum PaymentStatus {
+  PENDING
+  IN_REVIEW
+  PAID
+  REJECTED
+  EXPIRED
+}
+
+enum MessageDirection {
+  IN
+  OUT
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  sessions     Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Linha unica (id = "main") com as configuracoes do estudio.
+// Textos padrao ficam em lib/defaults.ts (evita acentos em DEFAULT do DDL, que o Windows corrompe).
+model Business {
+  id                   String          @id @default("main")
+  name                 String
+  phone                String          @default("")
+  address              String          @default("")
+  pixKey               String          @default("")
+  pixName              String          @default("")
+  pixCity              String          @default("BRASIL")
+  depositPercent       Int             @default(30)
+  openMinutes          Int             @default(540)
+  closeMinutes         Int             @default(1080)
+  workDays             Int[]           @default([1, 2, 3, 4, 5, 6])
+  slotStepMinutes      Int             @default(30)
+  bufferMinutes         Int             @default(0)
+  reminderHours        Int             @default(24)
+  returnEnabled        Boolean         @default(false)
+  returnAfterDays      Int             @default(14)
+  returnWindowStart    Int             @default(600)
+  returnWindowEnd      Int             @default(1080)
+  returnTemplate       String          @default("")
+  waSessionId          String          @default("")
+  tagline              String          @default("")
+  logoVersion          Int             @default(0)
+  hasLogo              Boolean         @default(false)
+  coverVersion         Int             @default(0)
+  hasCoverDesktop      Boolean         @default(false)
+  hasCoverMobile       Boolean         @default(false)
+  themeBg              String          @default("#0f0c1b")
+  themeSurface         String          @default("#1e192b")
+  themeText            String          @default("#ffffff")
+  themePrimary         String          @default("#7c3aed")
+  themeAccent          String          @default("#ec4899")
+  themeConfirm         String          @default("#10b981")
+  themeLightBg         String          @default("#faf7f5")
+  themeLightSurface    String          @default("#ffffff")
+  themeLightText       String          @default("#2b2230")
+  confirmationTemplate String
+  reminderTemplate     String
+  updatedAt            DateTime        @updatedAt
+}
+
+model Service {
+  id          String            @id @default(cuid())
+  name        String
+  description String            @default("")
+  durationMin Int
+  priceCents  Int
+  active      Boolean           @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime          @default(now())
+  items       AppointmentItem[]
+}
+
+// Chave primaria = numero do WhatsApp (somente digitos, com DDI 55).
+model Customer {
+  phone        String        @id
+  name         String
+  notes        String        @default("")
+  returnDueAt  DateTime?
+  returnSentAt DateTime?
+  returnOptOut Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  appointments Appointment[]
+  messages     MessageLog[]
+}
+
+model Appointment {
+  id             String            @id @default(cuid())
+  publicToken    String            @unique @default(cuid())
+  customerId     String
+  customer       Customer          @relation(fields: [customerId], references: [phone])
+  startsAt       DateTime
+  endsAt         DateTime
+  status         AppointmentStatus @default(PENDING_PAYMENT)
+  totalCents     Int
+  depositCents   Int
+  notes          String            @default("")
+  reminderSentAt DateTime?
+  createdAt      DateTime          @default(now())
+  items          AppointmentItem[]
+  payments       Payment[]
+  messages       MessageLog[]
+
+  @@index([startsAt])
+  @@index([status])
+}
+
+// Preço e duração são copiados do serviço no momento da reserva (histórico imutável).
+model AppointmentItem {
+  id            String      @id @default(cuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  serviceId     String
+  service       Service     @relation(fields: [serviceId], references: [id])
+  name          String
+  priceCents    Int
+  durationMin   Int
+}
+
+model Payment {
+  id            String          @id @default(cuid())
+  appointmentId String
+  appointment   Appointment     @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  amountCents   Int
+  status        PaymentStatus   @default(PENDING)
+  pixPayload    String?
+  proofMime     String?
+  proofData     Bytes?
+  rejectReason  String?
+  paidAt        DateTime?
+  reviewedAt    DateTime?
+  createdAt     DateTime        @default(now())
+
+  @@index([appointmentId])
+}
+
+model MessageLog {
+  id            String           @id @default(cuid())
+  direction     MessageDirection
+  phone         String
+  body          String
+  status        String           @default("SENT")
+  error         String?
+  customerId    String?
+  customer      Customer?        @relation(fields: [customerId], references: [phone])
+  appointmentId String?
+  appointment   Appointment?     @relation(fields: [appointmentId], references: [id])
+  createdAt     DateTime         @default(now())
+
+  @@index([phone, createdAt])
+}
+
+// Idempotência de webhooks (YouPI / WA-AKG).
+model WebhookEvent {
+  id         String   @id
+  source     String
+  receivedAt DateTime @default(now())
+}
+
+// Logo enviada pelo administrador (PNG/JPG/WebP, ate 1 MB). Fica no proprio banco.
+model BusinessLogo {
+  id        String   @id @default("main")
+  data      Bytes
+  mime      String
+  updatedAt DateTime @updatedAt
+}
+
+// Imagem de fundo do topo da pagina publica: id = "desktop" ou "mobile".
+model BusinessCover {
+  id        String   @id
+  data      Bytes
+  mime      String
+  updatedAt DateTime @updatedAt
+}

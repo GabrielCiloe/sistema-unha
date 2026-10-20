@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0f0c1b;
+  --color-surface: #1e192b;
+  --color-surface-2: #292238;
+  --color-line: #3b2f52;
+  --color-muted: #a8a3b8;
+  --color-brand: #7c3aed;
+  --color-brand-soft: #c4b5fd;
+  --color-ink: #ffffff;
+  --color-confirm: #10b981;
+  --color-on-brand: #ffffff;
+  --color-on-confirm: #000000;
+  --color-accent: #ec4899;
+  --font-sans: "Segoe UI", system-ui, Arial, sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+html[data-mode="light"] {
+  color-scheme: light;
+}
+
+/* Tons claros (…-300) são feitos para fundo escuro; no modo claro usamos versões mais escuras para manter o contraste. */
+html[data-mode="light"] .text-red-300 { color: #b91c1c; }
+html[data-mode="light"] .text-emerald-300 { color: #047857; }
+html[data-mode="light"] .text-amber-300 { color: #b45309; }
+html[data-mode="light"] .text-sky-300 { color: #0369a1; }
+html[data-mode="light"] .text-violet-300 { color: #6d28d9; }
+html[data-mode="light"] .text-zinc-300 { color: #3f3f46; }
+html[data-mode="light"] .text-green-300 { color: #15803d; }
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand-soft);
+  outline-offset: 3px;
+}
+
+button:not(:disabled),
+select {
+  cursor: pointer;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line bg-surface p-5;
+  }
+  .input {
+    @apply w-full rounded-xl border border-line bg-background px-3.5 py-2.5 text-sm text-ink placeholder:text-muted/70 focus:border-brand-soft focus:outline-none;
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-medium text-muted;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 bg-brand text-on-brand hover:brightness-110;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 border border-line bg-surface-2 text-ink hover:border-brand-soft;
+  }
+  .btn-confirm {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-confirm px-4 py-2.5 text-sm font-semibold text-on-confirm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 border border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20;
+  }
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
