@@ -28,7 +28,8 @@ export async function createSession(userId: string) {
   (await cookies()).set(COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    // Secure só quando o app é servido por HTTPS: em rede local por HTTP (IP), o navegador descartaria o cookie.
+    secure: (process.env.APP_ORIGIN ?? "").startsWith("https://") || (!process.env.APP_ORIGIN && process.env.NODE_ENV === "production"),
     path: "/",
     maxAge: TTL_MS / 1000,
   });

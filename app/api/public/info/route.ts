@@ -22,6 +22,7 @@ export const GET = handle(async () => {
       description: s.description,
       durationMin: s.durationMin,
       priceCents: s.priceCents,
+      missingNailPriceCents: s.missingNailPriceCents,
     })),
   });
 });

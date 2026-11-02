@@ -105,7 +105,7 @@ export default function Agenda() {
     <>
       <PageTitle title="Agenda" />
 
-      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filtrar por situação">
+      <div className="chips mb-4" role="group" aria-label="Filtrar por situação">
         {FILTERS.map(([v, l]) => (
           <button key={v} onClick={() => setFilter(v)} aria-pressed={filter === v} className={filter === v ? "btn-primary" : "btn-ghost"}>{l}</button>
         ))}

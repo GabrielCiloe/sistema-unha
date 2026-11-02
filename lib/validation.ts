@@ -5,6 +5,7 @@ export const serviceSchema = z.object({
   description: z.string().trim().max(300).default(""),
   durationMin: z.number().int().min(5).max(600),
   priceCents: z.number().int().min(100).max(10_000_00),
+  missingNailPriceCents: z.number().int().min(0).max(100_000).default(0),
   active: z.boolean().default(true),
 });
 
@@ -21,6 +22,7 @@ export const businessSchema = z.object({
   workDays: z.array(z.number().int().min(0).max(6)).max(7),
   slotStepMinutes: z.number().int().refine((n) => [10, 15, 20, 30, 45, 60].includes(n), "Intervalo inválido"),
   bufferMinutes: z.number().int().min(0).max(120),
+  minLeadDays: z.number().int().min(0).max(60),
   reminderHours: z.number().int().min(1).max(72),
   returnEnabled: z.boolean(),
   returnAfterDays: z.number().int().min(1).max(365),
@@ -29,13 +31,17 @@ export const businessSchema = z.object({
   returnTemplate: z.string().trim().max(1500),
   waSessionId: z.string().trim().max(80),
   confirmationTemplate: z.string().trim().min(5).max(600),
-  reminderTemplate: z.string().trim().min(5).max(600),
+  reminderTemplate: z.string().trim().min(5).max(1500),
 })
   .refine((b) => b.closeMinutes > b.openMinutes, "Fechamento deve ser depois da abertura")
   .refine((b) => b.returnWindowEnd > b.returnWindowStart, "O horário final dos convites deve ser depois do inicial");
 
+export const MAX_MISSING_NAILS = 10;
+
 export const bookingSchema = z.object({
   serviceIds: z.array(z.string()).min(1).max(6),
+  // Unhas faltando por servico de manutencao (so vale para servicos com preco por unha).
+  missingNails: z.record(z.string(), z.number().int().min(0).max(MAX_MISSING_NAILS)).optional(),
   startsAt: z.string().datetime(),
   name: z.string().trim().min(2).max(80),
   phone: z.string().trim().min(8).max(20),

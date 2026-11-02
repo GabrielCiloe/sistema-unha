@@ -84,9 +84,16 @@ export const POST = handle(async (req) => {
     const url = webhookUrl();
     const secret = process.env.WA_WEBHOOK_SECRET;
     if (!url || !secret) throw new HttpError(503, "Defina APP_ORIGIN e WA_WEBHOOK_SECRET no .env.");
-    if (!body.enabled) return json({ ok: true, removed: await removeWebhook(body.sessionId, url) });
-    const created = await ensureWebhook(body.sessionId, url, secret);
-    return json({ ok: true, created });
+    try {
+      if (!body.enabled) return json({ ok: true, removed: await removeWebhook(body.sessionId, url) });
+      const created = await ensureWebhook(body.sessionId, url, secret);
+      return json({ ok: true, created });
+    } catch (e) {
+      // O WA-AKG só aceita webhooks https:// em endereço público (anti-SSRF). Em rede local por HTTP, o recebimento não fica disponível.
+      const why = (e instanceof Error ? e.message : "erro").replace(/\.$/, "");
+      const hint = /https|private|local/i.test(why) ? ` O recebimento exige o app publicado em HTTPS com endereço público (APP_ORIGIN atual: ${url}).` : "";
+      throw new HttpError(502, `O WA-AKG recusou o webhook: ${why}.${hint}`);
+    }
   }
   if (body.action === "connect") {
     const biz = await getBusiness();

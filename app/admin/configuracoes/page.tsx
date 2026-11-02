@@ -12,7 +12,7 @@ import { FormSkeleton } from "@/components/skeleton";
 type Biz = {
   name: string; phone: string; address: string; pixKey: string; pixName: string; pixCity: string;
   depositPercent: number; openMinutes: number; closeMinutes: number;
-  workDays: number[]; slotStepMinutes: number; bufferMinutes: number; reminderHours: number; waSessionId: string;
+  workDays: number[]; slotStepMinutes: number; bufferMinutes: number; minLeadDays: number; reminderHours: number; waSessionId: string;
   confirmationTemplate: string; reminderTemplate: string;
   returnEnabled: boolean; returnAfterDays: number; returnWindowStart: number; returnWindowEnd: number; returnTemplate: string;
 };
@@ -50,7 +50,7 @@ export default function Settings() {
   return (
     <>
       <PageTitle title="Configurações" />
-      <form onSubmit={save} className="space-y-6">
+      <form onSubmit={save} className="has-actionbar space-y-6">
         <section className="card grid gap-4 sm:grid-cols-2">
           <h2 className="font-semibold sm:col-span-2">Estúdio</h2>
           <Field id="name" label="Nome" value={b.name} onChange={(v) => set("name", v)} />
@@ -79,6 +79,11 @@ export default function Settings() {
             <label className="label" htmlFor="buffer">Pausa entre atendimentos (min)</label>
             <input id="buffer" type="number" min={0} max={120} step={5} className="input" value={b.bufferMinutes} onChange={(e) => set("bufferMinutes", Number(e.target.value))} />
             <p className="mt-1 text-xs text-muted">Tempo reservado para limpar/preparar depois de cada cliente. Use 0 para encaixar um atendimento logo após o outro.</p>
+          </div>
+          <div>
+            <label className="label" htmlFor="lead">Antecedência mínima (dias)</label>
+            <input id="lead" type="number" min={0} max={60} className="input" value={b.minLeadDays} onChange={(e) => set("minLeadDays", Number(e.target.value))} />
+            <p className="mt-1 text-xs text-muted">A cliente só vê horários a partir de hoje + esse número de dias. Com 2, quem agenda hoje encontra vagas a partir de depois de amanhã. Use 0 para permitir hoje mesmo.</p>
           </div>
           <fieldset>
             <legend className="label">Dias de atendimento</legend>
@@ -113,11 +118,13 @@ export default function Settings() {
           </div>
           <div>
             <label className="label" htmlFor="rt">Lembrete</label>
-            <textarea id="rt" rows={3} className="input" value={b.reminderTemplate} onChange={(e) => set("reminderTemplate", e.target.value)} />
+            <textarea id="rt" rows={6} className="input" value={b.reminderTemplate} onChange={(e) => set("reminderTemplate", e.target.value)} />
+            <p className="mt-1 text-xs text-muted">Escreva várias versões separadas por uma linha com <code>---</code>: uma delas é sorteada a cada envio. Variáveis: {"{cliente} {negocio} {servico} {data} {hora}"}.</p>
           </div>
           <div className="max-w-xs">
             <label className="label" htmlFor="rh">Enviar lembrete quantas horas antes</label>
             <input id="rh" type="number" min={1} max={72} className="input" value={b.reminderHours} onChange={(e) => set("reminderHours", Number(e.target.value))} />
+            <p className="mt-1 text-xs text-muted">O envio é espalhado: cada lembrete sai num horário sorteado até 1h30 antes ou depois desse ponto, só entre 08:00 e 21:00, poucos por vez e com pausas aleatórias, para não parecer disparo em massa.</p>
           </div>
         </section>
 
@@ -157,7 +164,9 @@ export default function Settings() {
           </div>
         </section>
 
-        <button className="btn-primary">Salvar configurações</button>
+        <div className="actionbar">
+          <button className="btn-primary">Salvar configurações</button>
+        </div>
       </form>
     </>
   );

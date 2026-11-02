@@ -4,8 +4,7 @@ import { settlePastAppointments } from "@/lib/server/appointments";
 import { handle, HttpError, json } from "@/lib/server/http";
 import { HOLD_MINUTES } from "@/lib/server/slots";
 import { runReturnInvites } from "@/lib/server/returns";
-import { sendText } from "@/lib/server/whatsapp";
-import { renderTemplate } from "@/lib/templates";
+import { runReminders } from "@/lib/server/reminders";
 
 // Agendado pela Vercel Cron (vercel.json) ou por qualquer cron externo com
 // "Authorization: Bearer $CRON_SECRET". Envia lembretes e libera reservas sem pagamento.
@@ -36,27 +35,8 @@ export const GET = handle(async (req) => {
     data: { status: "CANCELLED" },
   });
 
-  const due = await db.appointment.findMany({
-    where: {
-      status: "CONFIRMED",
-      reminderSentAt: null,
-      startsAt: { gt: now, lte: new Date(now.getTime() + biz.reminderHours * 3600_000) },
-    },
-    include: { customer: true, items: true },
-    take: 50,
-  });
-  let sent = 0;
-  for (const a of due) {
-    const text = renderTemplate(biz.reminderTemplate, {
-      cliente: a.customer.name,
-      negocio: biz.name,
-      servico: a.items.map((i) => i.name).join(" + "),
-      startsAt: a.startsAt,
-    });
-    // Marca antes de enviar a próxima: falha de envio fica no histórico, sem reenviar em loop.
-    await db.appointment.update({ where: { id: a.id }, data: { reminderSentAt: new Date() } });
-    if (await sendText(a.customer.phone, text, { customerId: a.customerId, appointmentId: a.id })) sent++;
-  }
+  // Lembretes espalhados e aleatórios (lib/server/reminders.ts): horário sorteado por agendamento, poucos por execução.
+  const reminders = await runReminders(biz);
   const returns = await runReturnInvites(biz);
-  return json({ completed, expired: expired.count, reminders: sent, due: due.length, returns });
+  return json({ completed, expired: expired.count, reminders, returns });
 });

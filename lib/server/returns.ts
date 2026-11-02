@@ -28,8 +28,8 @@ export function planSendTime(biz: Pick<Biz, "returnWindowStart" | "returnWindowE
 }
 
 // Escolhe uma das versões da mensagem (separadas por uma linha "---").
-export function pickVariant(template: string) {
-  const parts = (template.trim() || DEFAULT_RETURN_TEMPLATE).split(/^\s*---\s*$/m).map((p) => p.trim()).filter(Boolean);
+export function pickVariant(template: string, fallback = DEFAULT_RETURN_TEMPLATE) {
+  const parts = (template.trim() || fallback).split(/^\s*---\s*$/m).map((p) => p.trim()).filter(Boolean);
   return parts[Math.floor(Math.random() * parts.length)];
 }
 

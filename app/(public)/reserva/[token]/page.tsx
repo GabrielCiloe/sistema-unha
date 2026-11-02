@@ -1,18 +1,36 @@
 "use client";
 
-import { Check, Copy, Upload } from "lucide-react";
+import { CircleCheck, Copy, MessageCircle, Upload } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { use, useEffect, useState } from "react";
-import { PayBadge } from "@/components/status";
+import { BrandHeader } from "@/components/brand-header";
 import { api } from "@/lib/client";
 import { brl, fmtDateTime } from "@/lib/templates";
 import { BookingSkeleton } from "@/components/skeleton";
 
 type Booking = {
-  business: { name: string; address: string };
+  business: { name: string; address: string; logoUrl: string | null; whatsapp: string | null };
   appointment: { status: string; startsAt: string; totalCents: number; depositCents: number; customerName: string; items: { name: string; priceCents: number }[] };
   payment: { id: string; status: string; amountCents: number; pixPayload: string | null; rejectReason: string | null } | null;
 };
+
+// "Quarta - feira, 03/11/2026, 09:30" (formato do Figma)
+const fmtLong = (iso: string) => {
+  const d = new Date(iso);
+  const f = (o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", ...o }).format(d);
+  const wd = f({ weekday: "long" }).replace("-feira", " - feira");
+  return `${wd.charAt(0).toUpperCase()}${wd.slice(1)}, ${f({ day: "2-digit", month: "2-digit", year: "numeric" })}, ${f({ hour: "2-digit", minute: "2-digit" })}`;
+};
+
+// Cartão de aviso do Figma: fundo quase branco, borda suave, sombra e ícone de check em caixa rosé.
+function Notice({ children }: { children: React.ReactNode }) {
+  return (
+    <div role="status" className="flex items-center gap-[10px] rounded-[10px] border border-accent/50 bg-[#fbfafd] px-[15px] py-[25px] shadow-[0_4px_2px_rgba(0,0,0,0.25)]">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-[4px] bg-accent/5 text-brand"><CircleCheck size={24} fill="currentColor" className="text-brand [&>path]:stroke-white" aria-hidden /></span>
+      <p className="text-[14px] font-medium leading-[1.4] text-ink">{children}</p>
+    </div>
+  );
+}
 
 export default function BookingStatus({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
@@ -52,69 +70,75 @@ export default function BookingStatus({ params }: { params: Promise<{ token: str
     }
   }
 
-  if (!data) return error ? <p role="alert" className="p-8 text-center text-red-300">{error}</p> : <BookingSkeleton />;
+  if (!data) return error ? <p role="alert" className="p-8 text-center text-red-700">{error}</p> : <BookingSkeleton />;
   const { appointment: a, payment: p } = data;
   const needsPayment = a.status === "PENDING_PAYMENT" && p && ["PENDING", "REJECTED"].includes(p.status);
 
   return (
-    <main className="mx-auto max-w-md px-4 py-10">
-      <h1 className="mb-1 text-xl font-semibold">{data.business.name}</h1>
-      <p className="mb-6 text-sm text-muted">Olá, {a.customerName}!</p>
-
-      <section className="card mb-5 text-sm">
-        <p className="font-medium">{a.items.map((i) => i.name).join(" + ")}</p>
-        <p className="mt-1 text-brand-soft">{fmtDateTime(a.startsAt)}</p>
-        {data.business.address && <p className="mt-1 text-muted">{data.business.address}</p>}
-        <p className="mt-3 flex justify-between"><span>Total</span><strong>{brl(a.totalCents)}</strong></p>
-      </section>
-
-      {a.status === "CONFIRMED" && (
-        <div role="status" className="card text-center" style={{ borderColor: "var(--color-confirm)" }}>
-          <Check className="mx-auto mb-2" style={{ color: "var(--color-confirm)" }} />
-          <p className="font-semibold">Horário confirmado!</p>
-          <p className="mt-1 text-sm text-muted">Você receberá a confirmação no WhatsApp.</p>
-        </div>
-      )}
-      {a.status === "CANCELLED" && <p role="status" className="card text-center text-sm text-muted">Esta reserva foi cancelada ou expirou. Faça um novo agendamento.</p>}
-
-      {needsPayment && p && (
-        <section className="card space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Pague o sinal: {brl(p.amountCents)}</h2>
-            <PayBadge status={p.status} />
+    <>
+      <BrandHeader name={data.business.name} logoUrl={data.business.logoUrl} />
+      <main className="mx-auto max-w-[390px] space-y-[15px] px-5 pb-20">
+        <section className="flex items-end justify-between gap-3 rounded-[10px] border-2 border-brand bg-brand/10 px-4 py-[15px] leading-[1.4]">
+          <div className="min-w-0">
+            <p className="text-[14px] font-bold text-ink">{a.items.map((i) => i.name).join(" + ")}</p>
+            <p className="text-[10px] text-ink/35">{fmtLong(a.startsAt)}</p>
+            {data.business.address && <p className="text-[10px] text-ink/35">{data.business.address}</p>}
+            <p className="text-[14px] font-bold text-ink">Total</p>
           </div>
-          {p.rejectReason && <p role="alert" className="text-sm text-red-300">Comprovante recusado: {p.rejectReason}. Envie outro.</p>}
+          <p className="shrink-0 text-[14px] font-bold text-ink">{brl(a.totalCents)}</p>
+        </section>
 
-          {p.pixPayload && (
-            <>
-              <div className="rounded-xl bg-white p-3"><QRCodeSVG value={p.pixPayload} size={200} className="mx-auto" /></div>
-              <button
-                className="btn-ghost w-full"
-                onClick={async () => {
-                  await navigator.clipboard.writeText(p.pixPayload!);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2500);
-                }}
-              >
-                <Copy size={15} /> {copied ? "Código copiado!" : "Copiar Pix copia e cola"}
-              </button>
-              <div>
-                <p className="mb-2 text-sm text-muted">Depois de pagar, envie o comprovante (PNG, JPG ou PDF até 2 MB):</p>
-                <label className="btn-confirm w-full cursor-pointer">
-                  <Upload size={15} /> {uploading ? "Enviando…" : "Enviar comprovante"}
+        {a.status === "CONFIRMED" && (
+          <Notice>Horário confirmado, {a.customerName}!<br />Você também recebe a confirmação pelo WhatsApp.</Notice>
+        )}
+        {a.status === "CANCELLED" && <p role="status" className="pcard text-center text-sm text-muted">Esta reserva foi cancelada ou expirou. Faça um novo agendamento.</p>}
+        {a.status === "PENDING_PAYMENT" && p?.status === "IN_REVIEW" && (
+          <Notice>Comprovante recebido.<br />Estamos conferindo o pagamento, você receberá a confirmação pelo WhatsApp</Notice>
+        )}
+
+        {needsPayment && p && (
+          <section className="pcard space-y-5">
+            <h2 className="text-[16px] font-semibold text-ink">Pague o sinal: {brl(p.amountCents)}</h2>
+            {p.rejectReason && <p role="alert" className="text-sm text-red-700">Comprovante recusado: {p.rejectReason}. Envie outro.</p>}
+            {p.pixPayload && (
+              <>
+                <div className="rounded-[10px] bg-white"><QRCodeSVG value={p.pixPayload} size={200} className="mx-auto" /></div>
+                <button
+                  type="button"
+                  className="btn-outline w-full"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(p.pixPayload!);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2500);
+                  }}
+                >
+                  <Copy size={20} strokeWidth={1.5} /> {copied ? "Código copiado!" : "Copiar Pix copia e cola"}
+                </button>
+                <p className="text-[14px] leading-[1.4] text-ink/35">Depois de pagar, envie o comprovante.</p>
+                {data.business.whatsapp && (
+                  <>
+                    <a
+                      href={`https://wa.me/${data.business.whatsapp}?text=${encodeURIComponent(`Olá! Segue o comprovante do sinal do meu horário (${a.items.map((i) => i.name).join(" + ")}, ${fmtDateTime(a.startsAt)}).`)}`}
+                      target="_blank"
+                      rel="noopener"
+                      className="btn-fill w-full py-3"
+                    >
+                      <MessageCircle size={20} strokeWidth={1.5} /> Enviar comprovante pelo WhatsApp
+                    </a>
+                    <p className="-mt-2 text-center text-[12px] leading-[1.4] text-ink/45">Ou compartilhe o comprovante do app do banco direto para o WhatsApp do estúdio: ele é reconhecido automaticamente.</p>
+                  </>
+                )}
+                <label className={`${data.business.whatsapp ? "btn-outline" : "btn-fill"} w-full cursor-pointer`}>
+                  <Upload size={20} strokeWidth={1.5} /> {uploading ? "Enviando…" : "Enviar arquivo do comprovante"}
                   <input type="file" accept="image/png,image/jpeg,application/pdf" className="sr-only" disabled={uploading} onChange={(e) => upload(e.target.files?.[0])} />
                 </label>
-              </div>
-              <p className="text-xs text-muted">Sua vaga fica reservada por 30 minutos.</p>
-            </>
-          )}
-        </section>
-      )}
-
-      {a.status === "PENDING_PAYMENT" && p?.status === "IN_REVIEW" && (
-        <p role="status" className="card text-center text-sm">Comprovante recebido. Estamos conferindo o pagamento — você será avisada no WhatsApp.</p>
-      )}
-      {error && <p role="alert" className="mt-4 text-sm text-red-300">{error}</p>}
-    </main>
+                <p className="text-[10px] leading-[1.4] text-ink/35">Foto (PNG ou JPG) ou PDF até 50 MB. Sua vaga fica reservada por 30 minutos.</p>
+              </>
+            )}
+          </section>
+        )}
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+      </main>
+    </>
   );
 }

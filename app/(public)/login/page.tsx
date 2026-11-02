@@ -51,7 +51,7 @@ export default function LoginPage() {
           <label className="label" htmlFor="password">Senha</label>
           <input id="password" name="password" type="password" autoComplete="current-password" required className="input" />
         </div>
-        {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
         <button disabled={busy} className="btn-primary w-full">{busy ? "Entrando…" : "Entrar"}</button>
       </form>
     </main>

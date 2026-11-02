@@ -17,9 +17,9 @@ Stack: Next.js 15 (App Router) · TypeScript · Tailwind 4 · Prisma · PostgreS
 | `/admin` | Visão geral |
 | `/admin/agenda` | Agendamentos (concluir, faltou, cancelar) |
 | `/admin/pagamentos` | Análise de comprovantes (aprovar exige conferência no banco) |
-| `/admin/servicos` · `/clientes` | CRUD de serviços · lista de clientes |
+| `/admin/servicos` · `/clientes` | CRUD de serviços (com preço por unha faltando para manutenção) · lista de clientes |
 | `/admin/whatsapp` | Conversas com as clientes e conexão do WhatsApp (QR, sessões, envio e recebimento) |
-| `/admin/configuracoes` | Horários, Pix, % do sinal, provedor, mensagens |
+| `/admin/configuracoes` | Horários, antecedência mínima em dias (padrão 2), Pix, % do sinal, provedor, mensagens |
 
 ## Rodando localmente
 

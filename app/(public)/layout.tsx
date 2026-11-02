@@ -1,12 +1,14 @@
-import { ThemeToggle } from "@/components/theme-toggle";
+import { getBusiness } from "@/lib/server/db";
+import { DEFAULT_THEME, themeVars } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
 
-// Páginas voltadas ao cliente (e login). As cores (Admin → Personalização) vêm do layout raiz, nos dois modos.
-export default function PublicLayout({ children }: { children: React.ReactNode }) {
+// Páginas voltadas à cliente (e login): sempre no modo claro, com as cores da marca
+// definidas em Admin → Personalização. O painel continua com o alternador escuro/claro.
+export default async function PublicLayout({ children }: { children: React.ReactNode }) {
+  const theme = await getBusiness().catch(() => DEFAULT_THEME);
   return (
-    <div className="relative min-h-screen bg-background text-ink">
-      <ThemeToggle className="absolute right-4 top-4 z-30" />
+    <div className="public-light relative min-h-screen bg-background text-ink" style={{ ...themeVars(theme, "light"), colorScheme: "light" } as React.CSSProperties}>
       {children}
     </div>
   );

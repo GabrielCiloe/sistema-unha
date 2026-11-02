@@ -1,4 +1,5 @@
 import { db, getBusiness } from "@/lib/server/db";
+import { normalizePhone } from "@/lib/server/whatsapp";
 import { handle, HttpError, json } from "@/lib/server/http";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,13 @@ export const GET = handle(async (_req, ctx) => {
   const biz = await getBusiness();
   const p = a.payments[0];
   return json({
-    business: { name: biz.name, address: biz.address },
+    business: {
+      name: biz.name,
+      address: biz.address,
+      logoUrl: biz.hasLogo ? `/api/public/logo?v=${biz.logoVersion}` : null,
+      // Número do estúdio (Configurações) para a cliente mandar o comprovante pelo WhatsApp; vazio = botão não aparece.
+      whatsapp: biz.phone && biz.waSessionId ? normalizePhone(biz.phone) : null,
+    },
     appointment: {
       status: a.status,
       startsAt: a.startsAt,

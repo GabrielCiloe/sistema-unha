@@ -30,6 +30,36 @@ export const normalizePhone = (phone: string) => {
 
 export const toJid = (phone: string) => `${normalizePhone(phone)}@s.whatsapp.net`;
 
+// Nono dígito (Brasil): celulares antigos foram cadastrados no WhatsApp sem o 9 (55 DDD + 8 dígitos) e muitas
+// clientes digitam com o 9 (ou o contrário). Devolve o número como veio e a outra forma, para procurar nas duas.
+export function phoneVariants(phone: string): string[] {
+  const p = normalizePhone(phone);
+  if (!p.startsWith("55")) return [p];
+  const rest = p.slice(4); // depois do DDI + DDD
+  if (rest.length === 9 && rest.startsWith("9")) return [p, p.slice(0, 4) + rest.slice(1)];
+  if (rest.length === 8 && /^[6-9]/.test(rest)) return [p, p.slice(0, 4) + "9" + rest];
+  return [p];
+}
+
+// Descobre em qual forma (com ou sem o 9) o número existe no WhatsApp, usando o check do WA-AKG. Guarda em memória.
+const jidCache = new Map<string, string>();
+export async function resolvePhone(phone: string, sessionId: string): Promise<string> {
+  const variants = phoneVariants(phone);
+  if (variants.length === 1) return variants[0];
+  const cached = jidCache.get(variants[0]);
+  if (cached) return cached;
+  try {
+    const r = await wa(`/chat/${encodeURIComponent(sessionId)}/check`, { method: "POST", body: JSON.stringify({ numbers: variants }) });
+    const results = (r?.data?.results ?? []) as { number: string; exists: boolean; jid?: string | null }[];
+    const hit = variants.find((v) => results.find((x) => x.number === v)?.exists);
+    const found = hit ? ((results.find((x) => x.number === hit)?.jid ?? "").split("@")[0].replace(/\D/g, "") || hit) : variants[0];
+    jidCache.set(variants[0], found);
+    return found;
+  } catch {
+    return variants[0];
+  }
+}
+
 export const listSessions = async () => (await wa("/sessions")).data ?? [];
 // Cria a sessão e já a inicia (nasce STOPPED). O identificador usado nas demais rotas é o `sessionId` curto.
 export async function createSessionRemote(name: string) {
@@ -85,7 +115,9 @@ export async function sendText(phone: string, text: string, opts: { customerId?:
     return false;
   }
   try {
-    await wa(`/messages/${encodeURIComponent(biz.waSessionId)}/${encodeURIComponent(toJid(phone))}/send`, {
+    // Envia para a forma do número que realmente existe no WhatsApp (com ou sem o 9); o histórico guarda o número da cliente.
+    const target = await resolvePhone(phone, biz.waSessionId);
+    await wa(`/messages/${encodeURIComponent(biz.waSessionId)}/${encodeURIComponent(toJid(target))}/send`, {
       method: "POST",
       body: JSON.stringify({ message: { text } }),
     });
@@ -95,6 +127,22 @@ export async function sendText(phone: string, text: string, opts: { customerId?:
     await log("FAILED", e instanceof Error ? e.message : "erro");
     return false;
   }
+}
+
+// Baixa a mídia de uma mensagem recebida. `fileUrl` vem no webhook (ex.: "/api/media/d628cg-ABC.jpg") e exige X-API-Key.
+export async function fetchMedia(fileUrl: string, maxBytes: number): Promise<{ data: Buffer; mime: string } | null> {
+  if (!whatsappConfigured() || !fileUrl.startsWith("/api/media/")) return null;
+  const res = await fetch(`${base()}${fileUrl}`, {
+    headers: { "X-API-Key": process.env.WA_AKG_API_KEY! },
+    signal: AbortSignal.timeout(60_000),
+    cache: "no-store",
+  }).catch(() => null);
+  if (!res?.ok) return null;
+  const len = Number(res.headers.get("content-length") ?? 0);
+  if (len > maxBytes) return null;
+  const data = Buffer.from(await res.arrayBuffer());
+  if (data.length > maxBytes) return null;
+  return { data, mime: res.headers.get("content-type") ?? "application/octet-stream" };
 }
 
 export function verifyHmac(raw: string, signature: string | null, secret: string | undefined) {

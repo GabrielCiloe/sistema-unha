@@ -1,9 +1,10 @@
 "use client";
 
 import { Banknote, CalendarDays, Check, FileText } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageTitle } from "@/components/admin-shell";
 import { Modal } from "@/components/modal";
+import { ProofViewer } from "@/components/proof-viewer";
 import { PayBadge } from "@/components/status";
 import { api, useApi } from "@/lib/client";
 import { brl, fmtDateTime } from "@/lib/templates";
@@ -52,15 +53,32 @@ export default function Payments() {
     }
   }
 
+  // Recusa com motivo em popup do próprio sistema (em vez do prompt() do navegador).
+  const [rejecting, setRejecting] = useState<string | null>(null);
+
+  // Atualiza a lista sozinha a cada 15 s (comprovantes que chegam pelo WhatsApp), menos enquanto
+  // um comprovante ou o popup de recusa está aberto, para não atrapalhar a análise.
+  useEffect(() => {
+    if (proof || rejecting) return;
+    const t = setInterval(reload, 15_000);
+    return () => clearInterval(t);
+  }, [proof, rejecting, reload]);
+  const [reason, setReason] = useState("");
   function reject(id: string) {
-    const reason = prompt("Motivo da recusa (a cliente poderá reenviar):");
-    if (reason && reason.trim().length >= 3) act(id, { action: "reject", reason });
+    setReason("");
+    setRejecting(id);
+  }
+  async function confirmReject(e: React.FormEvent) {
+    e.preventDefault();
+    if (!rejecting || reason.trim().length < 3) return;
+    await act(rejecting, { action: "reject", reason: reason.trim() });
+    setRejecting(null);
   }
 
   return (
     <>
       <PageTitle title="Pagamentos" />
-      <div className="mb-5 flex flex-wrap gap-2" role="group" aria-label="Filtrar por situação">
+      <div className="chips mb-5" role="group" aria-label="Filtrar por situação">
         {FILTERS.map(([v, l]) => (
           <button key={v} onClick={() => setFilter(v)} aria-pressed={filter === v} className={filter === v ? "btn-primary" : "btn-ghost"}>{l}</button>
         ))}
@@ -72,7 +90,7 @@ export default function Payments() {
       ) : rows.length === 0 ? (
         <p className="card text-sm text-muted">Nenhum pagamento neste filtro.</p>
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
           {rows.map((a) => {
             const p = a.payments[0];
             return (
@@ -116,13 +134,8 @@ export default function Payments() {
       )}
 
       {proof && (
-        <Modal title={`Comprovante — ${proof.name}`} onClose={closeProof}>
-          {proof.mime === "application/pdf" ? (
-            <iframe title="Comprovante" src={`/api/admin/payments/${proof.id}`} className="h-96 w-full rounded-xl bg-white" />
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img alt="Comprovante enviado" src={`/api/admin/payments/${proof.id}`} className="mx-auto max-h-96 rounded-xl" />
-          )}
+        <Modal title={`Comprovante — ${proof.name}`} onClose={closeProof} wide>
+          <ProofViewer src={`/api/admin/payments/${proof.id}`} mime={proof.mime} />
           <label className="mt-4 flex items-start gap-2 text-sm">
             <input type="checkbox" checked={confirmedBank} onChange={(e) => setConfirmedBank(e.target.checked)} className="mt-1" />
             Conferi no app do banco que o valor entrou na conta.
@@ -135,6 +148,33 @@ export default function Payments() {
           </div>
         </Modal>
       )}
+      {rejecting && (
+        <Modal title="Recusar comprovante" onClose={() => setRejecting(null)} top>
+          <form onSubmit={confirmReject} className="space-y-4">
+            <div>
+              <label className="label" htmlFor="reject-reason">Motivo da recusa</label>
+              <textarea
+                id="reject-reason"
+                data-autofocus
+                rows={3}
+                minLength={3}
+                maxLength={200}
+                required
+                className="input"
+                placeholder="Ex.: o valor do comprovante não confere com o sinal."
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-muted">A cliente vê esse motivo na página da reserva e pode enviar outro comprovante.</p>
+            </div>
+            <div className="flex gap-2">
+              <button className="btn-danger flex-1" disabled={reason.trim().length < 3}>Recusar comprovante</button>
+              <button type="button" className="btn-ghost" onClick={() => setRejecting(null)}>Cancelar</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
     </>
   );
 }

@@ -22,7 +22,17 @@ export type SlotBiz = {
   closeMinutes: number;
   slotStepMinutes: number;
   bufferMinutes: number;
+  minLeadDays: number;
 };
+
+export const todayLocal = (nowMs: number) => new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(new Date(nowMs));
+export const addDays = (dateStr: string, n: number) => {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+};
+// Primeiro instante em que a cliente pode agendar: inicio do dia (hoje + minLeadDays) no fuso local.
+export const leadStart = (biz: Pick<SlotBiz, "minLeadDays">, nowMs = Date.now()) => localToDate(addDays(todayLocal(nowMs), biz.minLeadDays), 0);
+export const fmtDay = (dateStr: string) => `${dateStr.slice(8)}/${dateStr.slice(5, 7)}`;
 
 // Horários que seguram vaga: confirmados/concluídos, ou pendentes ainda dentro da janela de retenção
 // (ou com comprovante em análise). `bufferMin` amplia a checagem pela pausa entre atendimentos.
@@ -41,7 +51,7 @@ export function blockingWhere(from: Date, to: Date, bufferMin = 0) {
   };
 }
 
-export type DayReason = "closed" | "too_long" | "full" | "passed";
+export type DayReason = "closed" | "too_long" | "full" | "passed" | "too_soon";
 export type DayResult = { slots: string[]; reason: DayReason | null };
 
 type Busy = { startsAt: Date; endsAt: Date };
@@ -79,7 +89,8 @@ export function daySlots(biz: SlotBiz, dateStr: string, duration: number, busy: 
   }
   if (cursor < close) free.push([cursor, close]);
 
-  const earliest = nowMs + MIN_LEAD_MINUTES * MIN;
+  // Antecedencia minima: alguns minutos a partir de agora e, se configurado, so a partir de hoje + N dias.
+  const earliest = Math.max(nowMs + MIN_LEAD_MINUTES * MIN, leadStart(biz, nowMs).getTime());
   const all: number[] = [];
   for (const [a, b] of free) {
     // O serviço precisa caber; se o período termina num atendimento, também respeita a pausa antes dele.
@@ -94,7 +105,7 @@ export function daySlots(biz: SlotBiz, dateStr: string, duration: number, busy: 
 
   if (all.length === 0) return { slots: [], reason: "full" };
   const future = all.filter((s) => s >= earliest);
-  if (future.length === 0) return { slots: [], reason: "passed" };
+  if (future.length === 0) return { slots: [], reason: close <= leadStart(biz, nowMs).getTime() && biz.minLeadDays > 0 ? "too_soon" : "passed" };
   return { slots: future.map((s) => new Date(s).toISOString()), reason: null };
 }
 
@@ -141,7 +152,7 @@ export const fmtMinutes = (m: number) => {
 const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
 // Texto para a cliente explicando por que não há horário.
-export function reasonMessage(reason: DayReason, durationMin: number, biz: SlotBiz) {
+export function reasonMessage(reason: DayReason, durationMin: number, biz: SlotBiz, nowMs = Date.now()) {
   switch (reason) {
     case "closed":
       return "Não atendemos neste dia da semana. Escolha outra data.";
@@ -151,5 +162,7 @@ export function reasonMessage(reason: DayReason, durationMin: number, biz: SlotB
       return `Não há um intervalo livre de ${fmtMinutes(durationMin)} seguidos neste dia (agenda cheia ou o que resta é menor que o tempo dos serviços). Tente outra data ou escolha menos serviços.`;
     case "passed":
       return "Os horários desta data já passaram. Escolha outra data.";
+    case "too_soon":
+      return `Agendamos com pelo menos ${biz.minLeadDays} ${biz.minLeadDays === 1 ? "dia" : "dias"} de antecedência. O primeiro dia disponível é ${fmtDay(addDays(todayLocal(nowMs), biz.minLeadDays))}.`;
   }
 }

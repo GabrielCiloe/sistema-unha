@@ -127,7 +127,7 @@ export default function Personalization() {
   return (
     <>
       <PageTitle title="Personalização" />
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="has-actionbar grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="min-w-0 space-y-6">
           <section className="card">
             <h2 className="mb-4 font-semibold">Logo e frase de apresentação</h2>
@@ -222,7 +222,7 @@ export default function Personalization() {
             {problems.map((p) => <p key={p} role="alert" className="mt-4 text-sm text-amber-300">{p}</p>)}
           </section>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="actionbar">
             <button className="btn-primary" disabled={busy || !valid || problems.length > 0} onClick={save}>Salvar personalização</button>
             <button className="btn-ghost" onClick={() => setTheme(DEFAULT_THEME)}><RotateCcw size={15} /> Restaurar cores padrão</button>
           </div>

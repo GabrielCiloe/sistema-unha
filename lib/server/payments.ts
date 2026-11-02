@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { buildPixPayload } from "@/lib/pix";
-import { renderTemplate } from "@/lib/templates";
+import { fmtDateTime, renderTemplate } from "@/lib/templates";
 import { db, getBusiness } from "./db";
 import { HttpError } from "./http";
 import { sendText } from "./whatsapp";
@@ -57,6 +57,20 @@ export async function sendConfirmation(appointmentId: string) {
   await sendText(a.customer.phone, text, { customerId: a.customerId, appointmentId: a.id });
 }
 
+// Comprovante enviado pelo WhatsApp: vincula à reserva pendente mais recente da cliente (mesmo efeito do botão "Enviar comprovante").
+// Devolve o que aconteceu para o webhook responder à cliente.
+export async function attachProofFromWhatsApp(phone: string, proof: Buffer, mime: "image/png" | "image/jpeg" | "application/pdf") {
+  const appt = await db.appointment.findFirst({
+    where: { customerId: phone, status: "PENDING_PAYMENT", payments: { some: { status: { in: ["PENDING", "REJECTED"] } } } },
+    orderBy: { createdAt: "desc" },
+    include: { payments: { orderBy: { createdAt: "desc" }, take: 1 }, items: true },
+  });
+  const p = appt?.payments[0];
+  if (!appt || !p || !["PENDING", "REJECTED"].includes(p.status)) return { attached: false as const };
+  await db.payment.update({ where: { id: p.id }, data: { status: "IN_REVIEW", proofData: new Uint8Array(proof), proofMime: mime, rejectReason: null } });
+  return { attached: true as const, appointmentId: appt.id, service: appt.items.map((i) => i.name).join(" + "), startsAt: appt.startsAt, ackSent: Boolean(appt.proofAckSentAt) };
+}
+
 export async function rejectPayment(paymentId: string, reason: string) {
   const p = await db.payment.findUnique({ where: { id: paymentId } });
   if (!p) throw new HttpError(404, "Pagamento não encontrado.");
@@ -65,4 +79,20 @@ export async function rejectPayment(paymentId: string, reason: string) {
     where: { id: p.id },
     data: { status: "REJECTED", rejectReason: reason, reviewedAt: new Date(), proofData: null },
   });
+  // Avisa a cliente no WhatsApp com o motivo e o link para reenviar. Falha de envio fica só no histórico.
+  const [biz, a] = await Promise.all([
+    getBusiness(),
+    db.appointment.findUnique({ where: { id: p.appointmentId }, include: { customer: true, items: true } }),
+  ]);
+  if (!a) return;
+  const first = a.customer.name.split(" ")[0];
+  const link = process.env.APP_ORIGIN ? `${process.env.APP_ORIGIN.replace(/\/+$/, "")}/reserva/${a.publicToken}` : null;
+  const text =
+    `Oi ${first}, não conseguimos aprovar o comprovante do sinal do seu horário no ${biz.name} ` +
+    `(${a.items.map((i) => i.name).join(" + ")}, ${fmtDateTime(a.startsAt)}).
+` +
+    `Motivo: ${reason}
+` +
+    `Pode enviar outro comprovante por aqui mesmo` + (link ? ` ou pelo link: ${link}` : "") + `. Sua vaga continua reservada enquanto o comprovante estiver em análise.`;
+  await sendText(a.customer.phone, text, { customerId: a.customerId, appointmentId: a.id });
 }

@@ -65,6 +65,7 @@ model Business {
   workDays             Int[]           @default([1, 2, 3, 4, 5, 6])
   slotStepMinutes      Int             @default(30)
   bufferMinutes         Int             @default(0)
+  minLeadDays           Int             @default(2)
   reminderHours        Int             @default(24)
   returnEnabled        Boolean         @default(false)
   returnAfterDays      Int             @default(14)
@@ -98,6 +99,8 @@ model Service {
   description String            @default("")
   durationMin Int
   priceCents  Int
+  // Manutencao (fibra, gel...): preco cobrado por unha faltando. 0 = nao se aplica.
+  missingNailPriceCents Int    @default(0)
   active      Boolean           @default(true)
   deletedAt   DateTime?
   createdAt   DateTime          @default(now())
@@ -129,6 +132,10 @@ model Appointment {
   depositCents   Int
   notes          String            @default("")
   reminderSentAt DateTime?
+  // Horario sorteado para o lembrete (espalhado, anti-bloqueio). Vazio = ainda nao planejado.
+  reminderDueAt  DateTime?
+  // Aviso "recebemos seu comprovante" (WhatsApp) ja enviado para esta reserva; nova reserva nasce vazio.
+  proofAckSentAt DateTime?
   createdAt      DateTime          @default(now())
   items          AppointmentItem[]
   payments       Payment[]
@@ -146,8 +153,10 @@ model AppointmentItem {
   serviceId     String
   service       Service     @relation(fields: [serviceId], references: [id])
   name          String
-  priceCents    Int
+  priceCents    Int // preco do servico + unhas faltando (o que foi cobrado)
   durationMin   Int
+  missingNails          Int @default(0)
+  missingNailPriceCents Int @default(0)
 }
 
 model Payment {

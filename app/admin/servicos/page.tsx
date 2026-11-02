@@ -8,16 +8,18 @@ import { api, useApi } from "@/lib/client";
 import { brl } from "@/lib/templates";
 import { CardGridSkeleton } from "@/components/skeleton";
 
-type Service = { id: string; name: string; description: string; durationMin: number; priceCents: number; active: boolean };
-type Draft = { id?: string; name: string; description: string; durationMin: string; price: string; active: boolean };
+type Service = { id: string; name: string; description: string; durationMin: number; priceCents: number; missingNailPriceCents: number; active: boolean };
+type Draft = { id?: string; name: string; description: string; durationMin: string; price: string; missingNailPrice: string; active: boolean };
 
-const empty: Draft = { name: "", description: "", durationMin: "60", price: "", active: true };
+const empty: Draft = { name: "", description: "", durationMin: "60", price: "", missingNailPrice: "", active: true };
+const parseBrl = (v: string) => Math.round(parseFloat(v.trim().replace(/\./g, "").replace(",", ".")) * 100);
 const toDraft = (s: Service): Draft => ({
   id: s.id,
   name: s.name,
   description: s.description,
   durationMin: String(s.durationMin),
   price: (s.priceCents / 100).toFixed(2).replace(".", ","),
+  missingNailPrice: s.missingNailPriceCents ? (s.missingNailPriceCents / 100).toFixed(2).replace(".", ",") : "",
   active: s.active,
 });
 
@@ -35,9 +37,11 @@ export default function Services() {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!draft) return;
-    const priceCents = Math.round(parseFloat(draft.price.replace(/\./g, "").replace(",", ".")) * 100);
+    const priceCents = parseBrl(draft.price);
     if (!Number.isFinite(priceCents)) return setError("Informe um preço válido, por exemplo 45,00.");
-    const body = { name: draft.name, description: draft.description, durationMin: Number(draft.durationMin), priceCents, active: draft.active };
+    const missingNailPriceCents = draft.missingNailPrice.trim() ? parseBrl(draft.missingNailPrice) : 0;
+    if (!Number.isFinite(missingNailPriceCents) || missingNailPriceCents < 0) return setError("Informe um preço por unha válido, por exemplo 10,00 (ou deixe em branco).");
+    const body = { name: draft.name, description: draft.description, durationMin: Number(draft.durationMin), priceCents, missingNailPriceCents, active: draft.active };
     setSaving(true);
     try {
       setError("");
@@ -53,7 +57,7 @@ export default function Services() {
   }
 
   async function toggle(s: Service) {
-    await api(`/api/admin/services/${s.id}`, { method: "PUT", body: { name: s.name, description: s.description, durationMin: s.durationMin, priceCents: s.priceCents, active: !s.active } });
+    await api(`/api/admin/services/${s.id}`, { method: "PUT", body: { name: s.name, description: s.description, durationMin: s.durationMin, priceCents: s.priceCents, missingNailPriceCents: s.missingNailPriceCents, active: !s.active } });
     reload();
   }
 
@@ -89,6 +93,7 @@ export default function Services() {
                 <p className="text-2xl font-semibold">{brl(s.priceCents)}</p>
                 <p className="flex items-center gap-1 text-sm text-muted"><Clock size={14} /> {s.durationMin} min</p>
               </div>
+              {s.missingNailPriceCents > 0 && <p className="mt-2 text-xs text-brand-soft">Manutenção: + {brl(s.missingNailPriceCents)} por unha faltando</p>}
               <div className="mt-5 flex items-center gap-2 border-t border-line pt-4">
                 <button className="btn-ghost flex-1" onClick={() => toggle(s)}>{s.active ? "Desativar" : "Ativar"}</button>
                 <button aria-label={`Editar ${s.name}`} className="btn-ghost" onClick={() => setDraft(toDraft(s))}><Pencil size={15} /></button>
@@ -115,6 +120,11 @@ export default function Services() {
                 <label className="label" htmlFor="s-dur">Duração (min)</label>
                 <input id="s-dur" className="input" required type="number" min={5} max={600} step={5} value={draft.durationMin} onChange={(e) => setDraft({ ...draft, durationMin: e.target.value })} />
               </div>
+            </div>
+            <div>
+              <label className="label" htmlFor="s-missing">Preço por unha faltando (R$) — só para manutenção</label>
+              <input id="s-missing" className="input" inputMode="decimal" placeholder="Ex.: 10,00 (em branco = não pergunta)" value={draft.missingNailPrice} onChange={(e) => setDraft({ ...draft, missingNailPrice: e.target.value })} />
+              <p className="mt-1 text-xs text-muted">Em manutenção de fibra ou gel, a cliente informa quantas unhas faltam e cada uma soma esse valor ao total e ao sinal.</p>
             </div>
             <div>
               <label className="label" htmlFor="s-desc">Descrição</label>

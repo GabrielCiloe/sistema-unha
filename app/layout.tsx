@@ -1,8 +1,11 @@
 import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import { MODE_SCRIPT } from "@/components/theme-toggle";
 import { getBusiness } from "@/lib/server/db";
 import { DEFAULT_THEME, themeCss } from "@/lib/theme";
 import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +21,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Cores da Personalização valem para o projeto todo, nos dois modos. Sem banco, cai no tema padrão.
   const theme = await getBusiness().catch(() => DEFAULT_THEME);
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
+    <html lang="pt-BR" className={inter.variable} suppressHydrationWarning>
       <head>
         <style dangerouslySetInnerHTML={{ __html: themeCss(theme) }} />
         <script dangerouslySetInnerHTML={{ __html: MODE_SCRIPT }} />

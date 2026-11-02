@@ -31,9 +31,9 @@ test.beforeAll(async () => {
   await db.appointment.deleteMany();
   await db.customer.deleteMany();
   const b = await db.business.findUnique({ where: { id: "main" } });
-  original = { openMinutes: b?.openMinutes, closeMinutes: b?.closeMinutes, slotStepMinutes: b?.slotStepMinutes, bufferMinutes: b?.bufferMinutes, workDays: b?.workDays, waSessionId: b?.waSessionId };
+  original = { openMinutes: b?.openMinutes, closeMinutes: b?.closeMinutes, slotStepMinutes: b?.slotStepMinutes, bufferMinutes: b?.bufferMinutes, minLeadDays: b?.minLeadDays, workDays: b?.workDays, waSessionId: b?.waSessionId };
   // Sem sessão de WhatsApp: nada é enviado de verdade durante os testes.
-  await db.business.update({ where: { id: "main" }, data: { openMinutes: 540, closeMinutes: 1080, slotStepMinutes: 30, bufferMinutes: 0, workDays: [1, 2, 3, 4, 5, 6], waSessionId: "", pixKey: "11144477735", pixName: "Studio Teste", pixCity: "Sao Paulo" } });
+  await db.business.update({ where: { id: "main" }, data: { openMinutes: 540, closeMinutes: 1080, slotStepMinutes: 30, bufferMinutes: 0, minLeadDays: 0, workDays: [1, 2, 3, 4, 5, 6], waSessionId: "", pixKey: "11144477735", pixName: "Studio Teste", pixCity: "Sao Paulo" } });
   await db.$disconnect();
 });
 
@@ -162,4 +162,50 @@ test("dia sem atendimento e reservas fora do expediente são recusados", async (
   expect((await book(request, [manicure], at(wd, "17:30"))).status()).toBe(400); // termina às 18:15
   expect((await book(request, [manicure], at(dom, "10:00"))).status()).toBe(400); // domingo
   expect((await book(request, [manicure], at(wd, "17:15"))).status()).toBe(201); // termina às 18:00 em ponto
+});
+
+test("antecedência mínima em dias: amanhã fica indisponível com too_soon e a reserva é recusada", async ({ request }) => {
+  await setHours(request, { minLeadDays: 2, bufferMinutes: 0, slotStepMinutes: 30, openMinutes: 540, closeMinutes: 1080, workDays: [0, 1, 2, 3, 4, 5, 6] });
+  const { manicure } = await services(request);
+  const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(new Date());
+  const plus = (n: number) => {
+    const [y, m, d] = today.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+  };
+  const tomorrow = await slotsOf(request, plus(1), [manicure]);
+  expect(tomorrow.slots).toEqual([]);
+  expect(tomorrow.reason).toBe("too_soon");
+  expect(tomorrow.message).toContain("2 dias de antecedência");
+  const ok = await slotsOf(request, plus(2), [manicure]);
+  expect(ok.slots.length).toBeGreaterThan(0);
+  // Mesmo forçando um horário de amanhã direto na API, o servidor recusa.
+  const forced = await book(request, [manicure], `${plus(1)}T13:00:00.000Z`);
+  expect(forced.status()).toBe(400);
+  expect((await forced.json()).error).toContain("antecedência");
+  const avail = await (await request.get(`/api/public/availability?serviceIds=${manicure}&days=4`)).json();
+  expect(avail.days[1].reason).toBe("too_soon");
+  expect(avail.days[2].available).toBe(true);
+  await setHours(request, { minLeadDays: 0, workDays: [1, 2, 3, 4, 5, 6] });
+});
+
+test("manutenção: unhas faltando somam ao total e ao sinal (cálculo no servidor)", async ({ request }) => {
+  await setHours(request, { minLeadDays: 0, bufferMinutes: 0, slotStepMinutes: 30, openMinutes: 540, closeMinutes: 1080, workDays: [0, 1, 2, 3, 4, 5, 6] });
+  await request.post("/api/auth/login", { data: ADMIN });
+  const created = await (await request.post("/api/admin/services", { data: { name: "Manutenção de gel (teste)", description: "", durationMin: 60, priceCents: 8000, missingNailPriceCents: 1000, active: true } })).json();
+  const id = created.service.id as string;
+  const { manicure } = await services(request);
+  const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(new Date());
+  const [y, m, d] = today.split("-").map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+  const { slots } = await slotsOf(request, day, [id, manicure]);
+  // 3 unhas faltando a R$ 10 = +R$ 30; a manicure não tem preço por unha, então o valor enviado para ela é ignorado.
+  const res = await request.post("/api/public/bookings", { data: { serviceIds: [id, manicure], startsAt: slots[0], name: "Cliente Teste", phone: "11988887777", missingNails: { [id]: 3, [manicure]: 5 } } });
+  expect(res.status()).toBe(201);
+  const { token } = await res.json();
+  const b = await (await request.get(`/api/public/bookings/${token}`)).json();
+  expect(b.appointment.totalCents).toBe(8000 + 3000 + 4500);
+  expect(b.appointment.depositCents).toBe(Math.round((8000 + 3000 + 4500) * 0.3));
+  expect(b.appointment.items.find((i: { name: string }) => i.name.startsWith("Manutenção de gel")).name).toContain("3 unhas faltando");
+  await request.delete(`/api/admin/services/${id}`);
+  await setHours(request, { workDays: [1, 2, 3, 4, 5, 6] });
 });

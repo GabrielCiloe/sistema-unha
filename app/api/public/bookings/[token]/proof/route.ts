@@ -2,7 +2,7 @@ import { db } from "@/lib/server/db";
 import { clientIp, handle, HttpError, json, rateLimit } from "@/lib/server/http";
 import { sniffProof } from "@/lib/validation";
 
-const MAX = 2 * 1024 * 1024;
+const MAX = 50 * 1024 * 1024; // foto ou PDF do comprovante
 
 export const POST = handle(async (req, ctx) => {
   const { token } = await ctx.params;
@@ -18,7 +18,7 @@ export const POST = handle(async (req, ctx) => {
 
   const file = (await req.formData()).get("file");
   if (!(file instanceof File)) throw new HttpError(400, "Anexe o comprovante.");
-  if (file.size > MAX) throw new HttpError(413, "Arquivo maior que 2 MB.");
+  if (file.size > MAX) throw new HttpError(413, "Arquivo maior que 50 MB.");
   const buf = Buffer.from(await file.arrayBuffer());
   const mime = sniffProof(buf);
   if (!mime) throw new HttpError(415, "Envie PNG, JPG ou PDF.");

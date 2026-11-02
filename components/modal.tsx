@@ -4,7 +4,8 @@ import { X } from "lucide-react";
 import { useEffect, useId, useRef } from "react";
 
 // Popup acessível: Esc e clique no fundo fecham, foco volta ao elemento anterior e fica preso dentro.
-export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+// `top`: para um popup aberto por cima de outro (ex.: motivo da recusa sobre o comprovante).
+export function Modal({ title, onClose, children, wide = false, top = false }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean; top?: boolean }) {
   const titleId = useId();
   const box = useRef<HTMLDivElement>(null);
   // Referência estável: o efeito abaixo roda só ao abrir/fechar (senão o foco voltaria ao 1º campo a cada tecla).
@@ -43,8 +44,8 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-md sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && closeRef.current()}>
-      <div ref={box} role="dialog" aria-modal="true" aria-labelledby={titleId} className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-line bg-surface p-5 sm:rounded-2xl">
+    <div className={`fixed inset-0 flex items-end justify-center bg-black/60 p-0 backdrop-blur-md sm:items-center sm:p-4 ${top ? "z-[60]" : "z-50"}`} onMouseDown={(e) => e.target === e.currentTarget && closeRef.current()}>
+      <div ref={box} role="dialog" aria-modal="true" aria-labelledby={titleId} className={`max-h-[92vh] w-full overflow-y-auto rounded-t-2xl border border-line bg-surface p-5 sm:rounded-2xl ${wide ? "max-w-3xl" : "max-w-lg"}`}>
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 id={titleId} className="text-lg font-semibold">{title}</h2>
           <button type="button" aria-label="Fechar" onClick={onClose} className="rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-ink"><X size={18} /></button>
