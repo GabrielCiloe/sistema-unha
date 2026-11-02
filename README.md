@@ -50,6 +50,10 @@ serviço de 120 min, pausa entre atendimentos, duração que não cabe no expedi
 agenda em calendário (cancelar, concluído automático), serviços/clientes/pagamentos em cards, personalização, WhatsApp
 (integração real com o WA-AKG local, webhook com HMAC) e cron protegido.
 
+## Deploy no Coolify (recomendado)
+
+Tudo num recurso Docker Compose (`compose.coolify.yaml`), inclusive o WhatsApp: passo a passo em [docs/DEPLOY-COOLIFY.md](docs/DEPLOY-COOLIFY.md).
+
 ## Deploy (subdomínio + banco próprio)
 
 1. **Banco**: crie um Postgres (Neon, Supabase ou VPS). No Neon use a URL *pooled* em `DATABASE_URL` e a direta em `DIRECT_URL`.
