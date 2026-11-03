@@ -13,6 +13,7 @@ Stack: Next.js 15 (App Router) · TypeScript · Tailwind 4 · Prisma · PostgreS
 | --- | --- |
 | `/` | Reserva pública: serviços → dia/horário → dados → sinal |
 | `/reserva/[token]` | Pix copia-e-cola/QR, envio de comprovante, acompanhamento |
+| `/compartilhar` | Recebe o comprovante pelo "Compartilhar" do app do banco (app instalado como PWA, Android/Chrome) |
 | `/login` | Acesso do administrador |
 | `/admin` | Visão geral |
 | `/admin/agenda` | Agendamentos (concluir, faltou, cancelar) |
@@ -45,7 +46,7 @@ npm test                # Playwright em http://localhost:3100, contra o build de
 Os testes **apagam e recriam dados**, por isso rodam num banco próprio (`unha_test`), em outra porta (3100) e com build próprio:
 não tocam no seu banco de desenvolvimento nem no `npm run dev`. Eles se recusam a rodar se o nome do banco não terminar em `_test`.
 
-Cobrem: login, fluxo completo (Pix → comprovante → aprovação → confirmação), regras de horário (atendimentos encaixados sem "buracos",
+Cobrem: login, fluxo completo (Pix → comprovante → aprovação → confirmação), regras de horário (horários em grade fixa a partir da abertura,
 serviço de 120 min, pausa entre atendimentos, duração que não cabe no expediente, dia fechado, reserva fora do expediente),
 agenda em calendário (cancelar, concluído automático), serviços/clientes/pagamentos em cards, personalização, WhatsApp
 (integração real com o WA-AKG local, webhook com HMAC) e cron protegido.
@@ -68,6 +69,6 @@ Tudo num recurso Docker Compose (`compose.coolify.yaml`), inclusive o WhatsApp: 
 ## Segurança (resumo)
 
 Senhas com scrypt; sessão por token aleatório (hash no banco, cookie HttpOnly, 7 dias); CSRF por Origin; rate limit em login,
-reserva e comprovante; comprovantes validados por assinatura de arquivo (PNG/JPG/PDF ≤ 2 MB) e servidos só ao admin;
+reserva e comprovante; comprovantes validados por assinatura de arquivo (PNG/JPG/PDF ≤ 50 MB) e servidos só ao admin;
 reserva transacional *Serializable* contra horário duplicado; webhooks com HMAC em tempo constante e idempotência.
 O rate limit é em memória (por instância serverless) — para proteção forte coloque também o WAF/Cloudflare na frente.

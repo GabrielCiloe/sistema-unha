@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { db, getBusiness } from "@/lib/server/db";
 import { settlePastAppointments } from "@/lib/server/appointments";
 import { handle, HttpError, json } from "@/lib/server/http";
-import { HOLD_MINUTES } from "@/lib/server/slots";
+import { expireHolds } from "@/lib/server/holds";
 import { runReturnInvites } from "@/lib/server/returns";
 import { runReminders } from "@/lib/server/reminders";
 
@@ -23,20 +23,13 @@ function authorized(req: Request) {
 export const GET = handle(async (req) => {
   if (!authorized(req)) throw new HttpError(401, "Não autorizado.");
   const biz = await getBusiness();
-  const now = new Date();
   const completed = await settlePastAppointments();
 
-  const expired = await db.appointment.updateMany({
-    where: {
-      status: "PENDING_PAYMENT",
-      createdAt: { lt: new Date(now.getTime() - HOLD_MINUTES * 60_000) },
-      payments: { none: { status: "IN_REVIEW" } },
-    },
-    data: { status: "CANCELLED" },
-  });
+  // Reservas cujo prazo do sinal venceu sem comprovante: cancela e avisa a cliente (lib/server/holds.ts).
+  const expired = await expireHolds();
 
   // Lembretes espalhados e aleatórios (lib/server/reminders.ts): horário sorteado por agendamento, poucos por execução.
   const reminders = await runReminders(biz);
   const returns = await runReturnInvites(biz);
-  return json({ completed, expired: expired.count, reminders, returns });
+  return json({ completed, expired, reminders, returns });
 });

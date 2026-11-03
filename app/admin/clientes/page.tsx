@@ -1,6 +1,7 @@
 "use client";
 
-import { CalendarDays, MessageCircle, MessageSquare } from "lucide-react";
+import { CalendarDays, MessageSquare } from "lucide-react";
+import { WhatsAppIcon } from "@/components/whatsapp-icon";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { PageTitle } from "@/components/admin-shell";
@@ -64,7 +65,7 @@ export default function Customers() {
 
               <div className="mt-5 flex gap-2 border-t border-line pt-4">
                 <Link className="btn-primary flex-1" href={`/admin/whatsapp?phone=${c.phone}`}><MessageSquare size={15} /> Conversar</Link>
-                <a className="btn-ghost" aria-label={`Abrir ${c.name} no WhatsApp`} href={`https://wa.me/${c.phone}`} target="_blank" rel="noreferrer"><MessageCircle size={15} /></a>
+                <a className="btn-ghost" aria-label={`Abrir ${c.name} no WhatsApp`} href={`https://wa.me/${c.phone}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={16} /></a>
               </div>
             </li>
           ))}

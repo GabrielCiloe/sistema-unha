@@ -2,18 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { PageTitle } from "@/components/admin-shell";
+import { LocationPicker } from "@/components/location-picker";
 import { Switch } from "@/components/switch";
 import { toast } from "@/components/toast";
-import { DEFAULT_RETURN_TEMPLATE } from "@/lib/defaults";
+import { DEFAULT_RESCHEDULE_TEMPLATE, DEFAULT_RETURN_TEMPLATE } from "@/lib/defaults";
 import { maskPhone } from "@/lib/templates";
 import { api, useApi } from "@/lib/client";
 import { FormSkeleton } from "@/components/skeleton";
 
 type Biz = {
-  name: string; phone: string; address: string; pixKey: string; pixName: string; pixCity: string;
+  name: string; phone: string; address: string; latitude: number | null; longitude: number | null; pixKey: string; pixName: string; pixCity: string;
   depositPercent: number; openMinutes: number; closeMinutes: number;
   workDays: number[]; slotStepMinutes: number; bufferMinutes: number; minLeadDays: number; reminderHours: number; waSessionId: string;
-  confirmationTemplate: string; reminderTemplate: string;
+  confirmationTemplate: string; reminderTemplate: string; rescheduleTemplate: string;
   returnEnabled: boolean; returnAfterDays: number; returnWindowStart: number; returnWindowEnd: number; returnTemplate: string;
 };
 
@@ -29,7 +30,7 @@ export default function Settings() {
   const [b, setB] = useState<Biz | null>(null);
 
   useEffect(() => {
-    if (data) setB({ ...data.business, returnTemplate: data.business.returnTemplate || DEFAULT_RETURN_TEMPLATE });
+    if (data) setB({ ...data.business, returnTemplate: data.business.returnTemplate || DEFAULT_RETURN_TEMPLATE, rescheduleTemplate: data.business.rescheduleTemplate || DEFAULT_RESCHEDULE_TEMPLATE });
   }, [data]);
 
   if (loading || !b || !data) return <FormSkeleton />;
@@ -58,6 +59,12 @@ export default function Settings() {
           <div className="sm:col-span-2"><Field id="address" label="Endereço" value={b.address} onChange={(v) => set("address", v)} /></div>
         </section>
 
+        <section className="card grid gap-3">
+          <h2 className="font-semibold">Localização no mapa</h2>
+          <p className="text-xs text-muted">Marque onde fica o estúdio. O link do mapa vai junto na confirmação e no lembrete, para a cliente abrir no app de navegação do celular.</p>
+          <LocationPicker lat={b.latitude} lng={b.longitude} address={b.address} onChange={(lat, lng) => setB({ ...b, latitude: lat, longitude: lng })} />
+        </section>
+
         <section className="card grid gap-4 sm:grid-cols-2">
           <h2 className="font-semibold sm:col-span-2">Horários</h2>
           <div>
@@ -73,7 +80,7 @@ export default function Settings() {
             <select id="step" className="input" value={b.slotStepMinutes} onChange={(e) => set("slotStepMinutes", Number(e.target.value))}>
               {[10, 15, 20, 30, 45, 60].map((n) => <option key={n} value={n}>{n} min</option>)}
             </select>
-            <p className="mt-1 text-xs text-muted">De quanto em quanto tempo a cliente vê um horário livre. Os horários começam sempre logo que o atendimento anterior termina, sem “buracos”.</p>
+            <p className="mt-1 text-xs text-muted">De quanto em quanto tempo aparece um horário, sempre contando a partir da abertura (ex.: 09:00, 09:30, 10:00). Vale para a cliente, para o reagendamento e para os horários livres na Agenda.</p>
           </div>
           <div>
             <label className="label" htmlFor="buffer">Pausa entre atendimentos (min)</label>
@@ -111,10 +118,15 @@ export default function Settings() {
 
         <section className="card grid gap-4">
           <h2 className="font-semibold">Mensagens do WhatsApp</h2>
-          <p className="text-xs text-muted">Variáveis: {"{cliente} {negocio} {servico} {data} {hora}"}</p>
+          <p className="text-xs text-muted">Variáveis: {"{cliente} {negocio} {servico} {data} {hora} {endereco} {mapa}"}. Com a localização marcada, o link do mapa entra sozinho no fim da mensagem; use {"{mapa}"} para escolher onde ele fica.</p>
           <div>
             <label className="label" htmlFor="ct">Confirmação (enviada quando o sinal é aprovado)</label>
             <textarea id="ct" rows={3} className="input" value={b.confirmationTemplate} onChange={(e) => set("confirmationTemplate", e.target.value)} />
+          </div>
+          <div>
+            <label className="label" htmlFor="rst">Reagendamento (enviada quando você remarca pela Agenda)</label>
+            <textarea id="rst" rows={3} className="input" value={b.rescheduleTemplate} onChange={(e) => set("rescheduleTemplate", e.target.value)} />
+            <p className="mt-1 text-xs text-muted">{"{data}"} e {"{hora}"} são os do novo horário.</p>
           </div>
           <div>
             <label className="label" htmlFor="rt">Lembrete</label>

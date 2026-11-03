@@ -13,6 +13,8 @@ export const businessSchema = z.object({
   name: z.string().trim().min(2).max(80),
   phone: z.string().trim().max(30),
   address: z.string().trim().max(200),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
   pixKey: z.string().trim().max(120),
   pixName: z.string().trim().max(60),
   pixCity: z.string().trim().max(30),
@@ -32,6 +34,7 @@ export const businessSchema = z.object({
   waSessionId: z.string().trim().max(80),
   confirmationTemplate: z.string().trim().min(5).max(600),
   reminderTemplate: z.string().trim().min(5).max(1500),
+  rescheduleTemplate: z.string().trim().max(600),
 })
   .refine((b) => b.closeMinutes > b.openMinutes, "Fechamento deve ser depois da abertura")
   .refine((b) => b.returnWindowEnd > b.returnWindowStart, "O horário final dos convites deve ser depois do inicial");

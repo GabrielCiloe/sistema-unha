@@ -29,7 +29,7 @@ export const PATCH = handle(async (req, ctx) => {
     const paid = a.payments.some((p) => p.status === "PAID");
     const first = a.customer.name.split(" ")[0];
     const text = paid
-      ? `Olá ${first}, seu horário no ${biz.name} foi cancelado. Vamos combinar com você a devolução do sinal pago. Se quiser, agende outro pelo nosso link.`
+      ? `Olá ${first}, seu horário no ${biz.name} foi cancelado. O sinal pago não é devolvido. Se quiser, agende outro horário pelo nosso link.`
       : `Olá ${first}, seu horário no ${biz.name} foi cancelado. Se quiser, agende outro pelo nosso link.`;
     await sendText(a.customer.phone, text, { customerId: a.customerId, appointmentId: a.id });
   }

@@ -5,8 +5,8 @@ import { useEffect, useState } from "react";
 
 type Mode = "dark" | "light";
 
-// Script que roda antes da pintura (no <head>) para não piscar o tema errado.
-export const MODE_SCRIPT = `try{var m=localStorage.getItem("mode");if(m!=="light"&&m!=="dark")m="dark";document.documentElement.dataset.mode=m}catch(e){document.documentElement.dataset.mode="dark"}`;
+// Script que roda antes da pintura (no <head>) para não piscar o tema errado. Sem escolha salva, começa no modo claro (como o login).
+export const MODE_SCRIPT = `try{var m=localStorage.getItem("mode");if(m!=="light"&&m!=="dark")m="light";document.documentElement.dataset.mode=m}catch(e){document.documentElement.dataset.mode="light"}`;
 
 export function ThemeToggle({ className = "" }: { className?: string }) {
   const [mode, setMode] = useState<Mode | null>(null);

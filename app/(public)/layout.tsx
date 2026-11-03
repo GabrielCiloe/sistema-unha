@@ -1,3 +1,4 @@
+import { InstallFab } from "@/components/pwa";
 import { getBusiness } from "@/lib/server/db";
 import { DEFAULT_THEME, themeVars } from "@/lib/theme";
 
@@ -10,6 +11,7 @@ export default async function PublicLayout({ children }: { children: React.React
   return (
     <div className="public-light relative min-h-screen bg-background text-ink" style={{ ...themeVars(theme, "light"), colorScheme: "light" } as React.CSSProperties}>
       {children}
+      <InstallFab />
     </div>
   );
 }

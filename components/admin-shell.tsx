@@ -56,15 +56,16 @@ export function AdminShell({ userName, businessName, logoUrl, children }: { user
     window.location.href = "/login";
   }
 
-  const Brand = () => (
-    <span className="flex min-w-0 items-center gap-2.5 font-semibold">
-      {logoUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={logoUrl} alt="" className="size-9 shrink-0 rounded-lg border border-line bg-background object-contain p-0.5" />
-      )}
-      <span className="truncate">{businessName}</span>
-    </span>
-  );
+  // Só a logo, ocupando o espaço (nome fica para leitores de tela). Sem logo enviada, mostra o nome.
+  const Brand = ({ bar = false }: { bar?: boolean }) =>
+    logoUrl ? (
+      <span className={`flex min-w-0 items-center ${bar ? "h-10 flex-1" : "w-full"}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={logoUrl} alt={businessName} className={bar ? "h-full w-auto max-w-full object-contain object-left" : "h-auto max-h-20 w-full object-contain"} />
+      </span>
+    ) : (
+      <span className="truncate font-semibold">{businessName}</span>
+    );
 
   const links = (big = false) =>
     nav.map(({ href, label, icon: Icon }) => {
@@ -96,8 +97,9 @@ export function AdminShell({ userName, businessName, logoUrl, children }: { user
   return (
     <div className="min-h-screen md:flex">
       {/* Topo do celular: marca + hambúrguer */}
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-surface px-4 py-3 md:hidden">
-        <Brand />
+      <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-line bg-surface px-4 py-3 md:hidden">
+        <Brand bar />
+        <ThemeToggle />
         <button type="button" aria-label="Abrir menu" aria-expanded={open} onClick={openMenu} className="rounded-lg p-2 text-ink hover:bg-surface-2">
           <Menu size={24} />
         </button>
@@ -108,8 +110,8 @@ export function AdminShell({ userName, businessName, logoUrl, children }: { user
         <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Menu">
           <div className={`absolute inset-0 bg-black/50 transition-opacity duration-250 ${shown ? "opacity-100" : "opacity-0"}`} onClick={closeMenu} />
           <div className={`absolute inset-y-0 right-0 flex w-[82%] max-w-sm flex-col bg-surface shadow-2xl transition-transform duration-250 ease-out ${shown ? "translate-x-0" : "translate-x-full"}`}>
-            <div className="flex items-center justify-between border-b border-line px-4 py-3">
-              <Brand />
+            <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+              <Brand bar />
               <button type="button" aria-label="Fechar menu" onClick={closeMenu} className="rounded-lg p-2 text-ink hover:bg-surface-2"><X size={22} /></button>
             </div>
             <nav aria-label="Principal" className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
@@ -117,10 +119,7 @@ export function AdminShell({ userName, businessName, logoUrl, children }: { user
               <div className="mt-2 border-t border-line pt-3">{waBadge}</div>
             </nav>
             <div className="space-y-3 border-t border-line p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="truncate text-xs text-muted">{userName}</p>
-                <ThemeToggle />
-              </div>
+              <p className="truncate text-xs text-muted">{userName}</p>
               <button onClick={logout} className="btn-ghost w-full"><LogOut size={16} /> Sair</button>
             </div>
           </div>
@@ -143,7 +142,7 @@ export function AdminShell({ userName, businessName, logoUrl, children }: { user
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 px-3 py-4 md:px-8 md:py-6">{children}</main>
+      <main className="min-w-0 flex-1 overflow-x-clip px-3 py-4 md:px-8 md:py-6">{children}</main>
       <Toaster />
     </div>
   );

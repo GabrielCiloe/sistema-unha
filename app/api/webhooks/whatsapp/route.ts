@@ -54,6 +54,7 @@ export const POST = handle(async (req) => {
         }
         return json({ ok: true, proof: "attached", ack: !r.ackSent });
       }
+      if (r.expired) return json({ ok: true, proof: "expired" }); // a cliente já foi avisada (lib/server/holds.ts)
     }
   }
   // Quem pede para parar não recebe mais convites de retorno.

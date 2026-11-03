@@ -1,12 +1,22 @@
 const fmt = (d: Date, opts: Intl.DateTimeFormatOptions) =>
   new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", ...opts }).format(d);
 
+// Link universal do Google Maps: abre o app de mapas no celular (Android/iPhone) já com o destino.
+export const mapsUrl = (lat?: number | null, lng?: number | null) =>
+  lat != null && lng != null ? `https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lng.toFixed(6)}` : null;
+
 export function renderTemplate(
   tpl: string,
-  v: { cliente: string; negocio: string; servico: string; startsAt: Date; dias?: number },
+  v: { cliente: string; negocio: string; servico: string; startsAt: Date; dias?: number; endereco?: string; mapa?: string | null },
 ) {
+  // Se o texto não usa {mapa} mas o estúdio tem localização, o link "Como chegar" entra no fim.
+  if (v.mapa && !tpl.includes("{mapa}")) tpl = `${tpl}
+
+📍 Como chegar: {mapa}`;
   return tpl
     .replaceAll("{dias}", String(v.dias ?? 0))
+    .replaceAll("{endereco}", v.endereco ?? "")
+    .replaceAll("{mapa}", v.mapa ?? "")
     .replaceAll("{cliente}", v.cliente.split(" ")[0])
     .replaceAll("{negocio}", v.negocio)
     .replaceAll("{servico}", v.servico)

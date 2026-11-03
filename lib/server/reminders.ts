@@ -2,7 +2,7 @@ import { pickVariant } from "./returns";
 import { db } from "./db";
 import { localToDate, todayLocal } from "./slots";
 import { sendText } from "./whatsapp";
-import { renderTemplate } from "@/lib/templates";
+import { mapsUrl, renderTemplate } from "@/lib/templates";
 import { DEFAULT_REMINDER_TEMPLATE } from "@/lib/defaults";
 
 // Lembretes espalhados e aleatórios (anti-bloqueio do WhatsApp):
@@ -17,7 +17,7 @@ const MIN = 60_000;
 const rand = (min: number, max: number) => min + Math.random() * (max - min);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-type Biz = { name: string; reminderHours: number; reminderTemplate: string };
+type Biz = { name: string; reminderHours: number; reminderTemplate: string; address: string; latitude: number | null; longitude: number | null };
 
 // Horário sorteado para o lembrete: alvo = início - reminderHours, deslocado aleatoriamente,
 // recortado para a janela de envio (se cair de madrugada, vai para o começo da janela do dia seguinte).
@@ -66,6 +66,8 @@ export async function runReminders(biz: Biz) {
       negocio: biz.name,
       servico: a.items.map((i) => i.name).join(" + "),
       startsAt: a.startsAt,
+      endereco: biz.address,
+      mapa: mapsUrl(biz.latitude, biz.longitude),
     });
     // Marca antes de enviar: falha de envio fica no histórico, sem reenviar em loop.
     await db.appointment.update({ where: { id: a.id }, data: { reminderSentAt: new Date() } });

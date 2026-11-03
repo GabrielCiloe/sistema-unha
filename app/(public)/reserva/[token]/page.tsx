@@ -1,16 +1,17 @@
 "use client";
 
-import { CircleCheck, Copy, MessageCircle, Upload } from "lucide-react";
+import { CircleCheck, Copy, MapPin, Upload } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { use, useEffect, useState } from "react";
 import { BrandHeader } from "@/components/brand-header";
 import { api } from "@/lib/client";
 import { brl, fmtDateTime } from "@/lib/templates";
 import { BookingSkeleton } from "@/components/skeleton";
+import { rememberBooking } from "@/components/pwa";
 
 type Booking = {
-  business: { name: string; address: string; logoUrl: string | null; whatsapp: string | null };
-  appointment: { status: string; startsAt: string; totalCents: number; depositCents: number; customerName: string; items: { name: string; priceCents: number }[] };
+  business: { name: string; address: string; logoUrl: string | null; whatsapp: string | null; mapsUrl: string | null };
+  appointment: { status: string; startsAt: string; holdUntil: string; totalCents: number; depositCents: number; customerName: string; items: { name: string; priceCents: number }[] };
   payment: { id: string; status: string; amountCents: number; pixPayload: string | null; rejectReason: string | null } | null;
 };
 
@@ -48,6 +49,7 @@ export default function BookingStatus({ params }: { params: Promise<{ token: str
   }
 
   useEffect(() => {
+    rememberBooking(token); // o "Compartilhar" do app instalado usa para achar esta reserva
     load();
     const t = setInterval(load, 8000); // pega a aprovação do comprovante
     return () => clearInterval(t);
@@ -81,17 +83,24 @@ export default function BookingStatus({ params }: { params: Promise<{ token: str
         <section className="flex items-end justify-between gap-3 rounded-[10px] border-2 border-brand bg-brand/10 px-4 py-[15px] leading-[1.4]">
           <div className="min-w-0">
             <p className="text-[14px] font-bold text-ink">{a.items.map((i) => i.name).join(" + ")}</p>
-            <p className="text-[10px] text-ink/35">{fmtLong(a.startsAt)}</p>
-            {data.business.address && <p className="text-[10px] text-ink/35">{data.business.address}</p>}
+            <p className="text-[12px] text-ink/35">{fmtLong(a.startsAt)}</p>
+            {data.business.address && <p className="text-[12px] text-ink/35">{data.business.address}</p>}
             <p className="text-[14px] font-bold text-ink">Total</p>
           </div>
           <p className="shrink-0 text-[14px] font-bold text-ink">{brl(a.totalCents)}</p>
         </section>
 
         {a.status === "CONFIRMED" && (
-          <Notice>Horário confirmado, {a.customerName}!<br />Você também recebe a confirmação pelo WhatsApp.</Notice>
+          <>
+            <Notice>Horário confirmado, {a.customerName}!<br />Você também recebe a confirmação pelo WhatsApp.</Notice>
+            {data.business.mapsUrl && (
+              <a href={data.business.mapsUrl} target="_blank" rel="noopener" className="btn-fill w-full py-3">
+                <MapPin size={20} strokeWidth={1.5} /> Como chegar
+              </a>
+            )}
+          </>
         )}
-        {a.status === "CANCELLED" && <p role="status" className="pcard text-center text-sm text-muted">Esta reserva foi cancelada ou expirou. Faça um novo agendamento.</p>}
+        {a.status === "CANCELLED" && <p role="status" className="pcard text-center text-sm text-muted">Esta reserva foi cancelada ou o prazo do sinal acabou. Entre em contato pelo WhatsApp do estúdio ou faça um novo agendamento.</p>}
         {a.status === "PENDING_PAYMENT" && p?.status === "IN_REVIEW" && (
           <Notice>Comprovante recebido.<br />Estamos conferindo o pagamento, você receberá a confirmação pelo WhatsApp</Notice>
         )}
@@ -115,24 +124,14 @@ export default function BookingStatus({ params }: { params: Promise<{ token: str
                   <Copy size={20} strokeWidth={1.5} /> {copied ? "Código copiado!" : "Copiar Pix copia e cola"}
                 </button>
                 <p className="text-[14px] leading-[1.4] text-ink/35">Depois de pagar, envie o comprovante.</p>
-                {data.business.whatsapp && (
-                  <>
-                    <a
-                      href={`https://wa.me/${data.business.whatsapp}?text=${encodeURIComponent(`Olá! Segue o comprovante do sinal do meu horário (${a.items.map((i) => i.name).join(" + ")}, ${fmtDateTime(a.startsAt)}).`)}`}
-                      target="_blank"
-                      rel="noopener"
-                      className="btn-fill w-full py-3"
-                    >
-                      <MessageCircle size={20} strokeWidth={1.5} /> Enviar comprovante pelo WhatsApp
-                    </a>
-                    <p className="-mt-2 text-center text-[12px] leading-[1.4] text-ink/45">Ou compartilhe o comprovante do app do banco direto para o WhatsApp do estúdio: ele é reconhecido automaticamente.</p>
-                  </>
-                )}
-                <label className={`${data.business.whatsapp ? "btn-outline" : "btn-fill"} w-full cursor-pointer`}>
-                  <Upload size={20} strokeWidth={1.5} /> {uploading ? "Enviando…" : "Enviar arquivo do comprovante"}
+                <label className="btn-fill w-full cursor-pointer py-3">
+                  <Upload size={20} strokeWidth={1.5} /> {uploading ? "Enviando…" : "Enviar comprovante"}
                   <input type="file" accept="image/png,image/jpeg,application/pdf" className="sr-only" disabled={uploading} onChange={(e) => upload(e.target.files?.[0])} />
                 </label>
-                <p className="text-[10px] leading-[1.4] text-ink/35">Foto (PNG ou JPG) ou PDF até 50 MB. Sua vaga fica reservada por 30 minutos.</p>
+                <p className="text-[12px] leading-[1.4] text-ink/35">
+                  Foto (PNG ou JPG) ou PDF até 50 MB. Sua vaga fica reservada até {new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(new Date(a.holdUntil))}
+                  {new Date(a.holdUntil).getTime() < Date.now() ? " (prazo encerrado: envie agora, se a vaga ainda estiver livre)" : ""}.
+                </p>
               </>
             )}
           </section>

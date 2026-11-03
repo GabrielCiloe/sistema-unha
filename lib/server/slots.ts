@@ -34,10 +34,10 @@ export const addDays = (dateStr: string, n: number) => {
 export const leadStart = (biz: Pick<SlotBiz, "minLeadDays">, nowMs = Date.now()) => localToDate(addDays(todayLocal(nowMs), biz.minLeadDays), 0);
 export const fmtDay = (dateStr: string) => `${dateStr.slice(8)}/${dateStr.slice(5, 7)}`;
 
-// Horários que seguram vaga: confirmados/concluídos, ou pendentes ainda dentro da janela de retenção
-// (ou com comprovante em análise). `bufferMin` amplia a checagem pela pausa entre atendimentos.
+// Horários que seguram vaga: confirmados/concluídos, ou pendentes dentro do prazo do sinal (holdUntil)
+// ou com comprovante em análise. `bufferMin` amplia a checagem pela pausa entre atendimentos.
 export function blockingWhere(from: Date, to: Date, bufferMin = 0) {
-  const holdLimit = new Date(Date.now() - HOLD_MINUTES * MIN);
+  const now = new Date();
   return {
     startsAt: { lt: new Date(to.getTime() + bufferMin * MIN) },
     endsAt: { gt: new Date(from.getTime() - bufferMin * MIN) },
@@ -45,7 +45,7 @@ export function blockingWhere(from: Date, to: Date, bufferMin = 0) {
       { status: { in: ["CONFIRMED", "COMPLETED"] as ("CONFIRMED" | "COMPLETED")[] } },
       {
         status: "PENDING_PAYMENT" as const,
-        OR: [{ createdAt: { gt: holdLimit } }, { payments: { some: { status: "IN_REVIEW" as const } } }],
+        OR: [{ holdUntil: { gt: now } }, { payments: { some: { status: "IN_REVIEW" as const } } }],
       },
     ],
   };
@@ -56,8 +56,9 @@ export type DayResult = { slots: string[]; reason: DayReason | null };
 
 type Busy = { startsAt: Date; endsAt: Date };
 
-// Calcula os horários do dia a partir dos PERÍODOS LIVRES: o primeiro horário de cada período começa
-// exatamente quando o anterior termina (ou na abertura), sem "buracos" de grade fixa.
+// Calcula os horários do dia numa GRADE FIXA a partir da abertura (ex.: 09:00, 09:30, 10:00...), de
+// slotStepMinutes em slotStepMinutes. Um horário é oferecido quando o serviço (e a pausa) cabe num período livre.
+// Assim a cliente, o reagendamento e a listagem da dona mostram sempre os mesmos horários padronizados.
 export function daySlots(biz: SlotBiz, dateStr: string, duration: number, busy: Busy[], nowMs: number): DayResult {
   if (!biz.workDays.includes(weekdayOf(dateStr))) return { slots: [], reason: "closed" };
 
@@ -92,16 +93,11 @@ export function daySlots(biz: SlotBiz, dateStr: string, duration: number, busy: 
   // Antecedencia minima: alguns minutos a partir de agora e, se configurado, so a partir de hoje + N dias.
   const earliest = Math.max(nowMs + MIN_LEAD_MINUTES * MIN, leadStart(biz, nowMs).getTime());
   const all: number[] = [];
-  for (const [a, b] of free) {
-    // O serviço precisa caber; se o período termina num atendimento, também respeita a pausa antes dele.
-    const need = dur + (b === close ? 0 : buffer);
-    for (let s = a; s + need <= b; s += step) all.push(s);
-    // Também oferece o horário que termina exatamente quando o próximo atendimento (ou o fechamento) começa:
-    // evita deixar um "buraco" sem uso antes de um agendamento.
-    const last = b - need;
-    if (last >= a && (last - a) % step !== 0) all.push(last);
+  for (let s = open; s + dur <= close; s += step) {
+    // O serviço precisa caber num período livre; se o período termina num atendimento, respeita a pausa antes dele.
+    const fits = free.some(([a, b]) => s >= a && s + dur + (b === close ? 0 : buffer) <= b);
+    if (fits) all.push(s);
   }
-  all.sort((x, y) => x - y);
 
   if (all.length === 0) return { slots: [], reason: "full" };
   const future = all.filter((s) => s >= earliest);
@@ -113,26 +109,31 @@ export async function loadBiz() {
   return db.business.findUnique({ where: { id: "main" } });
 }
 
+// Reagendamento pelo estúdio: sem a antecedência mínima em dias e sem contar o próprio atendimento como ocupado.
+export type SlotOpts = { ignoreLead?: boolean; excludeId?: string };
+const applyOpts = <B extends SlotBiz>(biz: B, opts?: SlotOpts): B => (opts?.ignoreLead ? { ...biz, minLeadDays: 0 } : biz);
+
 // Carrega de uma vez os atendimentos que bloqueiam o período (para vários dias).
-export async function loadBusy(from: Date, to: Date, bufferMin: number): Promise<Busy[]> {
+export async function loadBusy(from: Date, to: Date, bufferMin: number, excludeId?: string): Promise<Busy[]> {
   return db.appointment.findMany({
-    where: blockingWhere(from, to, bufferMin),
+    where: { ...blockingWhere(from, to, bufferMin), ...(excludeId ? { id: { not: excludeId } } : {}) },
     select: { startsAt: true, endsAt: true },
   });
 }
 
-export async function availableSlots(dateStr: string, durationMin: number): Promise<DayResult> {
+export async function availableSlots(dateStr: string, durationMin: number, opts?: SlotOpts): Promise<DayResult> {
   const biz = await loadBiz();
   if (!biz) return { slots: [], reason: "closed" };
-  const busy = await loadBusy(localToDate(dateStr, 0), localToDate(dateStr, 24 * 60), biz.bufferMinutes);
-  return daySlots(biz, dateStr, durationMin, busy, Date.now());
+  const busy = await loadBusy(localToDate(dateStr, 0), localToDate(dateStr, 24 * 60), biz.bufferMinutes, opts?.excludeId);
+  return daySlots(applyOpts(biz, opts), dateStr, durationMin, busy, Date.now());
 }
 
 // Disponibilidade de vários dias com uma única consulta ao banco.
-export async function availabilityForDays(dates: string[], durationMin: number) {
-  const biz = await loadBiz();
-  if (!biz || dates.length === 0) return { biz, days: [] as { date: string; count: number; reason: DayReason | null }[] };
-  const busy = await loadBusy(localToDate(dates[0], 0), localToDate(dates[dates.length - 1], 24 * 60), biz.bufferMinutes);
+export async function availabilityForDays(dates: string[], durationMin: number, opts?: SlotOpts) {
+  const loaded = await loadBiz();
+  if (!loaded || dates.length === 0) return { biz: loaded, days: [] as { date: string; count: number; reason: DayReason | null }[] };
+  const biz = applyOpts(loaded, opts);
+  const busy = await loadBusy(localToDate(dates[0], 0), localToDate(dates[dates.length - 1], 24 * 60), biz.bufferMinutes, opts?.excludeId);
   const now = Date.now();
   return {
     biz,
@@ -141,6 +142,32 @@ export async function availabilityForDays(dates: string[], durationMin: number) 
       return { date, count: r.slots.length, reason: r.reason };
     }),
   };
+}
+
+// Períodos livres do dia (expediente menos atendimentos + pausa): a dona vê onde ainda cabe um encaixe.
+export async function freePeriods(dateStr: string) {
+  const biz = await loadBiz();
+  if (!biz) return { closed: true, periods: [] as { from: string; to: string; minutes: number }[], slots: [] as string[] };
+  if (!biz.workDays.includes(weekdayOf(dateStr))) return { closed: true, periods: [], slots: [] };
+  const open = localToDate(dateStr, biz.openMinutes).getTime();
+  const close = localToDate(dateStr, biz.closeMinutes).getTime();
+  const buffer = biz.bufferMinutes * MIN;
+  const busy = await loadBusy(localToDate(dateStr, 0), localToDate(dateStr, 24 * 60), biz.bufferMinutes);
+  const blocks = busy
+    .map((b) => [Math.max(b.startsAt.getTime(), open), Math.min(b.endsAt.getTime() + buffer, close)] as [number, number])
+    .filter(([a, b]) => b > a)
+    .sort((x, y) => x[0] - y[0]);
+  const periods: { from: string; to: string; minutes: number }[] = [];
+  let cursor = open;
+  const push = (a: number, b: number) => b - a >= biz.slotStepMinutes * MIN && periods.push({ from: new Date(a).toISOString(), to: new Date(b).toISOString(), minutes: Math.round((b - a) / MIN) });
+  for (const [a, b] of blocks) {
+    if (a > cursor) push(cursor, a);
+    cursor = Math.max(cursor, b);
+  }
+  if (cursor < close) push(cursor, close);
+  // Horários de slotStepMinutes em slotStepMinutes dentro dos períodos livres (como a cliente vê), sem antecedência em dias.
+  const slots = daySlots({ ...biz, minLeadDays: 0 }, dateStr, biz.slotStepMinutes, busy, Date.now()).slots;
+  return { closed: false, periods, slots };
 }
 
 export const fmtMinutes = (m: number) => {

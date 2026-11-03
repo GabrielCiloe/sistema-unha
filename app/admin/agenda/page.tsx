@@ -1,13 +1,15 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, MessageSquare, UserX, XCircle } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, Clock, MessageSquare, UserX, XCircle } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageTitle } from "@/components/admin-shell";
 import { Modal } from "@/components/modal";
+import { MonthCalendar, type Day } from "@/components/month-calendar";
 import { ApptBadge, PayBadge } from "@/components/status";
+import { toast } from "@/components/toast";
 import { api, useApi } from "@/lib/client";
-import { brl, formatPhone } from "@/lib/templates";
+import { brl, fmtDateTime, formatPhone } from "@/lib/templates";
 import { Skeleton } from "@/components/skeleton";
 
 type Appt = {
@@ -39,6 +41,7 @@ const TONE: Record<string, string> = {
   CANCELLED: "bg-red-400",
   NO_SHOW: "bg-zinc-400",
 };
+const LEGEND = [["PENDING_PAYMENT", "Aguardando sinal"], ["CONFIRMED", "Confirmado"], ["COMPLETED", "Concluído"], ["CANCELLED", "Cancelado"], ["NO_SHOW", "Faltou"]];
 
 const TZ = "America/Sao_Paulo";
 const dayKey = (iso: string | Date) => new Intl.DateTimeFormat("sv-SE", { timeZone: TZ }).format(new Date(iso));
@@ -51,6 +54,8 @@ export default function Agenda() {
   const [cursor, setCursor] = useState({ y: Number(today.slice(0, 4)), m: Number(today.slice(5, 7)) - 1 });
   const [filter, setFilter] = useState("");
   const [open, setOpen] = useState<string | null>(null);
+  const [resched, setResched] = useState<Appt | null>(null);
+  const [showFree, setShowFree] = useState(false);
   const [error, setError] = useState("");
 
   // 6 semanas (42 dias) começando no domingo anterior ao dia 1.
@@ -84,7 +89,7 @@ export default function Agenda() {
   async function setStatus(a: Appt, status: "CANCELLED" | "NO_SHOW") {
     const msg =
       status === "CANCELLED"
-        ? `Cancelar o agendamento de ${a.customer.name}? A cliente será avisada no WhatsApp.${a.payments[0]?.status === "PAID" ? "\n\nO sinal já foi pago: combine a devolução com ela." : ""}`
+        ? `Cancelar o agendamento de ${a.customer.name}? A cliente será avisada no WhatsApp.${a.payments[0]?.status === "PAID" ? "\n\nO sinal já foi pago e não é devolvido. Se for só mudar a data, use Reagendar." : ""}`
         : `Registrar que ${a.customer.name} não compareceu?`;
     if (!confirm(msg)) return;
     try {
@@ -113,7 +118,7 @@ export default function Agenda() {
       {(error || loadError) && <p role="alert" className="mb-3 text-sm text-red-300">{error || loadError}</p>}
 
       <section className="card p-3 sm:p-5" aria-label="Calendário">
-        <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-lg font-semibold first-letter:uppercase">{MONTHS[cursor.m]} de {cursor.y}</h2>
           <div className="flex items-center gap-2">
             <button className="btn-ghost px-3" aria-label="Mês anterior" onClick={() => move(-1)}><ChevronLeft size={16} /></button>
@@ -121,6 +126,13 @@ export default function Agenda() {
             <button className="btn-ghost px-3" aria-label="Próximo mês" onClick={() => move(1)}><ChevronRight size={16} /></button>
           </div>
         </div>
+
+        {/* Legenda acima do calendário, para ficar visível sem rolar. */}
+        <ul className="mb-3 flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-ink" aria-label="Legenda">
+          {LEGEND.map(([s, l]) => (
+            <li key={s} className="flex items-center gap-1.5"><span className={`size-3 rounded-full ${TONE[s]}`} /> {l}</li>
+          ))}
+        </ul>
 
         <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xl border border-line bg-line text-center">
           {WEEK.map((d) => (
@@ -158,17 +170,23 @@ export default function Agenda() {
             );
           })}
         </div>
-
-        <ul className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted" aria-label="Legenda">
-          {[["PENDING_PAYMENT", "Aguardando sinal"], ["CONFIRMED", "Confirmado"], ["COMPLETED", "Concluído"], ["CANCELLED", "Cancelado"], ["NO_SHOW", "Faltou"]].map(([s, l]) => (
-            <li key={s} className="flex items-center gap-1.5"><span className={`size-2.5 rounded-full ${TONE[s]}`} /> {l}</li>
-          ))}
-        </ul>
         {loading && <Skeleton className="mt-3 h-4 w-32" />}
       </section>
 
       {open && (
-        <Modal title={openLabel.charAt(0).toUpperCase() + openLabel.slice(1)} onClose={() => setOpen(null)}>
+        <Modal
+          title={openLabel.charAt(0).toUpperCase() + openLabel.slice(1)}
+          onClose={() => {
+            setOpen(null);
+            setShowFree(false);
+          }}
+          footer={
+            <button type="button" className="btn-primary w-full" aria-expanded={showFree} onClick={() => setShowFree((v) => !v)}>
+              <Clock size={16} /> {showFree ? "Ocultar horários disponíveis" : "Ver horários disponíveis"}
+            </button>
+          }
+        >
+          {showFree && <FreePeriods date={open} />}
           {dayList.length === 0 ? (
             <p className="text-sm text-muted">Sem agendamentos neste dia{filter ? " para o filtro escolhido" : ""}.</p>
           ) : (
@@ -192,6 +210,9 @@ export default function Agenda() {
 
                   <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
                     <Link className="btn-ghost px-3 py-2" href={`/admin/whatsapp?phone=${a.customer.phone}`}><MessageSquare size={14} /> Conversar</Link>
+                    {["PENDING_PAYMENT", "CONFIRMED"].includes(a.status) && (
+                      <button className="btn-ghost px-3 py-2" onClick={() => setResched(a)}><CalendarClock size={14} /> Reagendar</button>
+                    )}
                     {["CONFIRMED", "COMPLETED"].includes(a.status) && new Date(a.startsAt) <= new Date() && (
                       <button className="btn-ghost px-3 py-2" onClick={() => setStatus(a, "NO_SHOW")}><UserX size={14} /> Faltou</button>
                     )}
@@ -205,6 +226,110 @@ export default function Agenda() {
           )}
         </Modal>
       )}
+
+      {resched && (
+        <Reschedule
+          appt={resched}
+          onClose={() => setResched(null)}
+          onDone={() => {
+            setResched(null);
+            reload();
+          }}
+        />
+      )}
     </>
+  );
+}
+
+// Horários livres do dia na mesma grade que a cliente vê (de slotStepMinutes em slotStepMinutes a partir da abertura).
+function FreePeriods({ date }: { date: string }) {
+  const { data, loading, error } = useApi<{ closed: boolean; periods: { from: string; to: string; minutes: number }[]; slots: string[] }>(`/api/admin/availability?date=${date}`);
+  return (
+    <section className="mb-4 rounded-xl border border-brand/40 bg-brand/10 p-3.5" aria-label="Horários disponíveis">
+      <h3 className="mb-2 text-sm font-semibold">Horários disponíveis</h3>
+      {loading && <Skeleton className="h-4 w-40" />}
+      {error && <p className="text-sm text-red-300">{error}</p>}
+      {data?.closed && <p className="text-sm text-muted">Não há atendimento neste dia da semana.</p>}
+      {data && !data.closed && data.slots.length === 0 && <p className="text-sm text-muted">Nenhum horário livre: dia cheio ou já passou.</p>}
+      {data && data.slots.length > 0 && (
+        <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4" aria-label="Horários livres">
+          {data.slots.map((s) => (
+            <li key={s} className="rounded-lg border border-line bg-surface py-2 text-center text-sm font-semibold">{time(s)}</li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+// Popup de reagendamento: mesmos serviços e valores; só muda data e hora. As vagas consideram a duração
+// dos serviços contratados e ignoram a antecedência mínima em dias (quem remarca é o estúdio).
+function Reschedule({ appt, onClose, onDone }: { appt: Appt; onClose: () => void; onDone: () => void }) {
+  const [days, setDays] = useState<Day[] | null>(null);
+  const [date, setDate] = useState("");
+  const [slots, setSlots] = useState<string[] | null>(null);
+  const [slotsMsg, setSlotsMsg] = useState<string | null>(null);
+  const [slot, setSlot] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const base = `/api/admin/appointments/${appt.id}/reschedule`;
+
+  useEffect(() => {
+    api<{ days: Day[] }>(base).then((r) => setDays(r.days)).catch((e) => setError(e.message));
+  }, [base]);
+
+  useEffect(() => {
+    setSlot("");
+    setSlots(null);
+    setSlotsMsg(null);
+    if (!date) return;
+    api<{ slots: string[]; message: string | null }>(`${base}?date=${date}`)
+      .then((r) => {
+        setSlots(r.slots);
+        setSlotsMsg(r.message);
+      })
+      .catch((e) => setError(e.message));
+  }, [date, base]);
+
+  async function confirmIt() {
+    if (!slot) return;
+    setBusy(true);
+    setError("");
+    try {
+      const r = await api<{ sent: boolean }>(base, { method: "POST", body: { startsAt: slot } });
+      toast(r.sent ? "Horário remarcado. A cliente foi avisada no WhatsApp." : "Horário remarcado. Não foi possível avisar pelo WhatsApp: confira a conexão.", r.sent);
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={`Reagendar: ${appt.customer.name}`} onClose={onClose} top>
+      <p className="text-sm text-muted">{appt.items.map((i) => i.name).join(" + ")} · atual: {fmtDateTime(appt.startsAt)}</p>
+      <p className="mb-4 text-xs text-muted">Serviços, valores e o sinal pago continuam os mesmos. Só a data e a hora mudam.</p>
+      {days === null && !error && <Skeleton className="h-64 w-full" />}
+      {days && <MonthCalendar days={days} value={date} onChange={setDate} />}
+      {date && (
+        <div className="mt-4">
+          <p className="label">Horário</p>
+          {slots === null && <p className="text-sm text-muted">Buscando horários…</p>}
+          {slots && slots.length === 0 && <p className="text-sm text-muted">{slotsMsg ?? "Sem horários livres neste dia."}</p>}
+          {slots && slots.length > 0 && (
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4" role="group" aria-label="Horários">
+              {slots.map((s) => (
+                <button key={s} type="button" aria-pressed={slot === s} onClick={() => setSlot(s)} className={slot === s ? "btn-primary" : "btn-ghost"}>{time(s)}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
+      <div className="mt-5 flex flex-wrap justify-end gap-2">
+        <button type="button" className="btn-ghost" onClick={onClose}>Voltar</button>
+        <button type="button" className="btn-primary" disabled={!slot || busy} onClick={confirmIt}>{busy ? "Remarcando…" : "Confirmar novo horário"}</button>
+      </div>
+    </Modal>
   );
 }

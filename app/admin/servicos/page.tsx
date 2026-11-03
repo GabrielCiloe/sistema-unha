@@ -83,21 +83,26 @@ export default function Services() {
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {data.services.map((s) => (
-            <li key={s.id} className={`card flex flex-col ${s.active ? "" : "opacity-60"}`}>
-              <div className="flex items-start justify-between gap-3">
-                <h2 className="font-semibold leading-snug">{s.name}</h2>
-                <span className={`badge shrink-0 ${s.active ? "bg-emerald-500/15 text-emerald-300" : "bg-zinc-500/20 text-zinc-300"}`}>{s.active ? "Ativo" : "Inativo"}</span>
+            // Desktop: topo (nome/descrição) e base (preço/ações) separados, para alinhar os cards da mesma linha.
+            <li key={s.id} className={`card flex flex-col md:justify-between ${s.active ? "" : "opacity-60"}`}>
+              <div>
+                <div className="flex items-start justify-between gap-3">
+                  <h2 className="font-semibold leading-snug">{s.name}</h2>
+                  <span className={`badge shrink-0 ${s.active ? "bg-emerald-500/15 text-emerald-300" : "bg-zinc-500/20 text-zinc-300"}`}>{s.active ? "Ativo" : "Inativo"}</span>
+                </div>
+                <p className="mt-1 line-clamp-2 min-h-10 text-sm text-muted">{s.description || "Sem descrição."}</p>
               </div>
-              <p className="mt-1 line-clamp-2 min-h-10 text-sm text-muted">{s.description || "Sem descrição."}</p>
-              <div className="mt-4 flex items-end justify-between">
-                <p className="text-2xl font-semibold">{brl(s.priceCents)}</p>
-                <p className="flex items-center gap-1 text-sm text-muted"><Clock size={14} /> {s.durationMin} min</p>
-              </div>
-              {s.missingNailPriceCents > 0 && <p className="mt-2 text-xs text-brand-soft">Manutenção: + {brl(s.missingNailPriceCents)} por unha faltando</p>}
-              <div className="mt-5 flex items-center gap-2 border-t border-line pt-4">
-                <button className="btn-ghost flex-1" onClick={() => toggle(s)}>{s.active ? "Desativar" : "Ativar"}</button>
-                <button aria-label={`Editar ${s.name}`} className="btn-ghost" onClick={() => setDraft(toDraft(s))}><Pencil size={15} /></button>
-                <button aria-label={`Excluir ${s.name}`} className="btn-danger" onClick={() => remove(s)}><Trash2 size={15} /></button>
+              <div>
+                <div className="mt-4 flex items-end justify-between">
+                  <p className="text-2xl font-semibold">{brl(s.priceCents)}</p>
+                  <p className="flex items-center gap-1 text-sm text-muted"><Clock size={14} /> {s.durationMin} min</p>
+                </div>
+                {s.missingNailPriceCents > 0 && <p className="mt-2 text-xs text-brand-soft">Manutenção: + {brl(s.missingNailPriceCents)} por unha faltando</p>}
+                <div className="mt-5 flex items-center gap-2 border-t border-line pt-4">
+                  <button className="btn-ghost flex-1" onClick={() => toggle(s)}>{s.active ? "Desativar" : "Ativar"}</button>
+                  <button aria-label={`Editar ${s.name}`} className="btn-ghost" onClick={() => setDraft(toDraft(s))}><Pencil size={15} /></button>
+                  <button aria-label={`Excluir ${s.name}`} className="btn-danger" onClick={() => remove(s)}><Trash2 size={15} /></button>
+                </div>
               </div>
             </li>
           ))}

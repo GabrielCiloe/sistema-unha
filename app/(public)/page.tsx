@@ -1,18 +1,18 @@
 "use client";
 
-import { Calendar, ChevronLeft, ChevronRight, Clock, Minus, Plus } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Calendar, Clock, Minus, Plus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BrandHeader } from "@/components/brand-header";
 import { api } from "@/lib/client";
 import { brl, maskPhone } from "@/lib/templates";
 import { InlineSkeleton, PublicSkeleton } from "@/components/skeleton";
+import { MonthCalendar, type Day } from "@/components/month-calendar";
 
 type Info = {
   business: { name: string; address: string; depositPercent: number; workDays: number[]; tagline: string; logoUrl: string | null; coverDesktopUrl: string | null; coverMobileUrl: string | null };
   services: { id: string; name: string; description: string; durationMin: number; priceCents: number; missingNailPriceCents: number }[];
 };
 
-type Day = { date: string; available: boolean; reason: string | null; message: string | null };
 
 // 120 -> "2h", 90 -> "1h30", 45 -> "45 min"
 const fmtDuration = (m: number) => {
@@ -29,76 +29,8 @@ const fmtEstimate = (m: number) => {
   return `${h}h${String(r).padStart(2, "0")}`;
 };
 
-const todayStr = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(new Date());
-const MONTHS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-const iso = (y: number, m: number, d: number) => new Date(Date.UTC(y, m, d)).toISOString().slice(0, 10); // m = 0..11, aceita d fora do mês
 const DAYS_AHEAD = 60; // quantos dias de disponibilidade a API devolve (limite dela)
 
-// Calendário mensal (Figma "Data"): D S T Q Q S S, dias com vaga em verde, escolhido em círculo rosé,
-// dias de outro mês em cinza claro. Só mostra meses dentro da janela de disponibilidade.
-function MonthCalendar({ days, value, onChange }: { days: Day[]; value: string; onChange: (d: string) => void }) {
-  const today = todayStr();
-  const last = days[days.length - 1]?.date ?? today;
-  const [ym, setYm] = useState(() => (value || today).slice(0, 7));
-  const [y, m] = ym.split("-").map(Number);
-  const byDate = new Map(days.map((d) => [d.date, d]));
-  const first = new Date(Date.UTC(y, m - 1, 1));
-  const startOffset = first.getUTCDay();
-  const cells = Array.from({ length: 42 }, (_, i) => {
-    const date = iso(y, m - 1, i - startOffset + 1);
-    return { date, inMonth: date.slice(0, 7) === ym, day: Number(date.slice(8)) };
-  });
-  const rows = cells.filter((_, i) => i < 35 || cells.slice(35).some((c) => c.inMonth)); // 6ª linha só se o mês precisar
-  const prevYm = iso(y, m - 2, 1).slice(0, 7);
-  const nextYm = iso(y, m, 1).slice(0, 7);
-  const canPrev = prevYm >= today.slice(0, 7);
-  const canNext = nextYm <= last.slice(0, 7);
-  return (
-    <div>
-      <div className="mb-3 flex items-center justify-between">
-        <button type="button" aria-label="Mês anterior" disabled={!canPrev} onClick={() => setYm(prevYm)} className="rounded-full p-1 text-ink disabled:opacity-25"><ChevronLeft size={20} /></button>
-        <span className="text-[14px] font-semibold text-ink">{MONTHS[m - 1]} {y}</span>
-        <button type="button" aria-label="Próximo mês" disabled={!canNext} onClick={() => setYm(nextYm)} className="rounded-full p-1 text-ink disabled:opacity-25"><ChevronRight size={20} /></button>
-      </div>
-      <div className="mb-4 flex items-center justify-center gap-5 text-[12px] text-ink/45">
-        <span className="flex items-center gap-1.5"><span className="size-3 rounded-full bg-[#1db954]" aria-hidden /> Dias disponíveis</span>
-        <span className="flex items-center gap-1.5"><span className="size-3 rounded-full bg-[#8f1f00]" aria-hidden /> Dias indisponíveis</span>
-      </div>
-      <div className="grid grid-cols-7 gap-y-2 text-center" role="grid" aria-label="Calendário">
-        {["D", "S", "T", "Q", "Q", "S", "S"].map((w, i) => (
-          <span key={i} className="text-[16px] text-ink/50">{w}</span>
-        ))}
-        {rows.map((c) => {
-          const info = byDate.get(c.date);
-          const available = Boolean(info?.available) && c.inMonth;
-          const on = value === c.date;
-          const cls = on
-            ? "bg-brand text-white font-semibold"
-            : !c.inMonth
-              ? "text-ink/25"
-              : available
-                ? "text-[#1db954] font-medium hover:bg-brand/10"
-                : "text-[#8f1f00] font-medium";
-          return (
-            <button
-              key={c.date}
-              type="button"
-              role="gridcell"
-              disabled={!available}
-              aria-pressed={on}
-              aria-current={c.date === today ? "date" : undefined}
-              title={!available && c.inMonth ? (info?.message ?? undefined) : undefined}
-              onClick={() => onChange(c.date)}
-              className={`mx-auto flex size-10 items-center justify-center rounded-full text-[16px] leading-none transition disabled:cursor-default ${cls}`}
-            >
-              {String(c.day).padStart(2, "0")}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 const hhmm = (iso: string) =>
   new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 
@@ -116,6 +48,14 @@ export default function BookingPage() {
   const [hasMissing, setHasMissing] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // Cada escolha leva a cliente ao próximo passo: serviço → calendário → horários → dados/pagamento.
+  const calRef = useRef<HTMLElement>(null);
+  const slotsRef = useRef<HTMLElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const goTo = (el: HTMLElement | null) => {
+    if (!el) return;
+    setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  };
 
   useEffect(() => {
     api<Info>("/api/public/info").then(setInfo).catch((e) => setError(e.message));
@@ -138,6 +78,17 @@ export default function BookingPage() {
       .then((r) => setAvail(r.days))
       .catch((e) => setError(e.message));
   }, [selected]);
+
+  useEffect(() => {
+    if (avail !== null && selected.length > 0) goTo(calRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avail]);
+  useEffect(() => {
+    if (date) goTo(slotsRef.current);
+  }, [date]);
+  useEffect(() => {
+    if (slot) goTo(formRef.current);
+  }, [slot]);
 
   const shownDays = (avail ?? []).filter((d) => d.reason !== "closed");
   const allBlocked = avail !== null && shownDays.length > 0 && shownDays.every((d) => !d.available);
@@ -204,7 +155,7 @@ export default function BookingPage() {
                     >
                       <span className="min-w-0 leading-[1.4]">
                         <span className="block text-[14px] font-bold text-ink">{s.name}</span>
-                        <span className="block text-[10px] text-ink/35">Duração: {fmtDuration(s.durationMin)}</span>
+                        <span className="block text-[12px] text-ink/35">Duração: {fmtDuration(s.durationMin)}</span>
                       </span>
                       <span className="shrink-0 text-[14px] font-bold text-ink">{brl(s.priceCents)}</span>
                     </button>
@@ -220,7 +171,7 @@ export default function BookingPage() {
           const n = missing[s.id] ?? 1;
           return (
             <section key={s.id} className="pcard">
-              <h2 className="ptitle">Manutenção: {s.name}</h2>
+              <h2 className="ptitle">Manutenção: Unha adicionada</h2>
               <p className="mb-3 text-[14px] font-medium text-ink">Tem unha faltando?</p>
               <div className="grid grid-cols-2 gap-x-5" role="group" aria-label={`Unha faltando em ${s.name}`}>
                 {[false, true].map((v) => (
@@ -239,7 +190,7 @@ export default function BookingPage() {
                 <div className="mt-4 flex items-center justify-between gap-3 rounded-[10px] border border-brand bg-brand/10 p-4 leading-[1.4]">
                   <span>
                     <span className="block text-[14px] font-bold text-ink">Quantas unhas?</span>
-                    <span className="block text-[10px] text-ink/35">{brl(s.missingNailPriceCents)} por unha · + {brl(n * s.missingNailPriceCents)}</span>
+                    <span className="block text-[12px] text-ink/35">{brl(s.missingNailPriceCents)} por unha · + {brl(n * s.missingNailPriceCents)}</span>
                   </span>
                   <span className="flex items-center gap-3">
                     <button type="button" aria-label="Menos uma unha" disabled={n <= 1} onClick={() => setMissing({ ...missing, [s.id]: n - 1 })} className="flex size-9 items-center justify-center rounded-full bg-surface text-accent disabled:opacity-30"><Minus size={16} /></button>
@@ -253,7 +204,7 @@ export default function BookingPage() {
         })}
 
         {selected.length > 0 && (
-          <section className="pcard">
+          <section ref={calRef} className="pcard scroll-mt-4">
             <h2 className="ptitle"><Calendar size={18} className="text-accent" aria-hidden /> Selecione a data</h2>
             {avail === null && <InlineSkeleton />}
             {blockedMsg && (
@@ -264,7 +215,7 @@ export default function BookingPage() {
         )}
 
         {date && (
-          <section className="pcard">
+          <section ref={slotsRef} className="pcard scroll-mt-4">
             <h2 className="ptitle"><Clock size={19} className="text-accent" aria-hidden /> Selecione o horário</h2>
             {slots === null && <p className="text-sm text-muted">Buscando horários…</p>}
             {slots && slots.length === 0 && <p role="status" className="text-sm text-muted">{slotsMsg ?? "Sem horários livres neste dia. Tente outra data."}</p>}
@@ -284,7 +235,7 @@ export default function BookingPage() {
         )}
 
         {slot && (
-          <form onSubmit={submit} className="space-y-[40px]">
+          <form ref={formRef} onSubmit={submit} className="scroll-mt-4 space-y-[40px]">
             <section className="pcard space-y-[15px]">
               <h2 className="ptitle !mb-[26px]">Seus dados</h2>
               <div>
@@ -319,14 +270,14 @@ export default function BookingPage() {
                 </ul>
                 <div className="mt-3 border-t border-brand/40 pt-3">
                   <div className="flex justify-between gap-3 text-[14px] font-bold text-ink">
-                    <span>Total <span className="text-[10px] font-normal text-ink/35">· tempo estimado {fmtEstimate(minutes)}</span></span>
+                    <span>Total <span className="text-[12px] font-normal text-ink/35">· tempo estimado {fmtEstimate(minutes)}</span></span>
                     <span className="shrink-0">{brl(total)}</span>
                   </div>
                   <div className="mt-1 flex justify-between gap-3 text-[14px] font-bold text-accent">
                     <span>Sinal para reservar ({info.business.depositPercent}%)</span>
                     <span className="shrink-0">{brl(deposit)}</span>
                   </div>
-                  <p className="mt-1 text-[10px] text-ink/35">O sinal é pago agora por Pix; o restante ({brl(total - deposit)}) no dia do atendimento.</p>
+                  <p className="mt-1 text-[12px] text-ink/35">O sinal é pago agora por Pix; o restante ({brl(total - deposit)}) no dia do atendimento.</p>
                 </div>
               </div>
             </section>

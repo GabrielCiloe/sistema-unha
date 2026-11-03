@@ -56,6 +56,8 @@ model Business {
   name                 String
   phone                String          @default("")
   address              String          @default("")
+  latitude             Float?
+  longitude            Float?
   pixKey               String          @default("")
   pixName              String          @default("")
   pixCity              String          @default("BRASIL")
@@ -90,6 +92,7 @@ model Business {
   themeLightText       String          @default("#2b2230")
   confirmationTemplate String
   reminderTemplate     String
+  rescheduleTemplate   String          @default("")
   updatedAt            DateTime        @updatedAt
 }
 
@@ -137,12 +140,14 @@ model Appointment {
   // Aviso "recebemos seu comprovante" (WhatsApp) ja enviado para esta reserva; nova reserva nasce vazio.
   proofAckSentAt DateTime?
   createdAt      DateTime          @default(now())
+  holdUntil      DateTime // até quando a vaga fica segurada sem comprovante (30 min; renovado na recusa)
   items          AppointmentItem[]
   payments       Payment[]
   messages       MessageLog[]
 
   @@index([startsAt])
   @@index([status])
+  @@index([status, holdUntil])
 }
 
 // Preço e duração são copiados do serviço no momento da reserva (histórico imutável).

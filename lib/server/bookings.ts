@@ -3,6 +3,7 @@ import { HttpError } from "./http";
 import { blockingWhere, leadStart, localToDate, reasonMessage, weekdayOf } from "./slots";
 import { normalizePhone, phoneVariants } from "./whatsapp";
 import { createDepositPayment } from "./payments";
+import { newHold } from "./holds";
 
 export async function createBooking(input: {
   serviceIds: string[];
@@ -64,6 +65,7 @@ export async function createBooking(input: {
           customerId: customer.phone,
           startsAt: input.startsAt,
           endsAt,
+          holdUntil: newHold(),
           totalCents,
           depositCents,
           notes: input.notes ?? "",

@@ -1,6 +1,5 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client";
 
@@ -29,17 +28,18 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-4">
+      {/* Mesma logo da tela da cliente (BrandHeader): 350 px, centralizada, sem moldura. */}
       <div className="mb-8 flex flex-col items-center gap-3 text-center">
-        <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-line bg-surface">
-          {brand?.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={brand.logoUrl} alt="" className="h-full w-full object-contain p-1.5" />
-          ) : (
-            <Sparkles className="text-accent" size={28} aria-hidden />
-          )}
-        </div>
-        <p className="text-lg font-semibold">{brand?.name ?? "Painel do estúdio"}</p>
-        <p className="-mt-2 text-xs text-muted">Acesso do administrador</p>
+        {brand?.logoUrl ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={brand.logoUrl} alt={`Logo de ${brand.name}`} className="mx-auto h-auto w-[350px] max-w-full object-contain" />
+            <h1 className="sr-only">{brand.name}</h1>
+          </>
+        ) : (
+          <h1 className="text-3xl font-semibold text-accent">{brand?.name ?? "Painel do estúdio"}</h1>
+        )}
+        <p className="text-xs text-muted">Acesso do administrador</p>
       </div>
       {/* method=post: se o JS ainda não carregou, as credenciais nunca vão na URL (GET). */}
       <form method="post" onSubmit={submit} className="card space-y-4">

@@ -20,8 +20,8 @@ type Appt = {
 
 const FILTERS = [
   ["", "Todos"],
-  ["IN_REVIEW", "Em análise"],
-  ["PENDING", "Aguardando"],
+  ["IN_REVIEW", "Confirmar sinal"],
+  ["PENDING", "Aguardando sinal"],
   ["PAID", "Pagos"],
   ["REJECTED", "Recusados"],
 ] as const;
@@ -113,17 +113,10 @@ export default function Payments() {
                 <div className="mt-5 flex-1 border-t border-line pt-4">
                   {p.status === "IN_REVIEW" && (
                     <button className="btn-primary w-full" onClick={() => setProof({ id: p.id, mime: p.proofMime ?? "", name: a.customer.name })}>
-                      <FileText size={15} /> Analisar comprovante
+                      <FileText size={15} /> Confirmar sinal
                     </button>
                   )}
-                  {p.status === "PENDING" && (
-                    <button
-                      className="btn-ghost w-full"
-                      onClick={() => confirm("Confirmar recebimento sem comprovante? Só faça se o valor já caiu na conta.") && act(p.id, { action: "approve", confirmedInBank: true })}
-                    >
-                      <Check size={15} /> Marcar como pago
-                    </button>
-                  )}
+                  {p.status === "PENDING" && <p className="text-center text-xs text-muted">Aguardando o comprovante da cliente.</p>}
                   {p.status === "PAID" && <p className="text-center text-xs text-muted">Pagamento confirmado.</p>}
                   {p.status === "REJECTED" && <p className="text-center text-xs text-muted">Aguardando novo comprovante.</p>}
                 </div>

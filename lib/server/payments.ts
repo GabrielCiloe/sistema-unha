@@ -1,9 +1,13 @@
 import { Prisma } from "@prisma/client";
 import { buildPixPayload } from "@/lib/pix";
-import { fmtDateTime, renderTemplate } from "@/lib/templates";
+import { fmtDateTime, mapsUrl, renderTemplate } from "@/lib/templates";
 import { db, getBusiness } from "./db";
+import { HOLD_MINUTES } from "./slots";
 import { HttpError } from "./http";
 import { sendText } from "./whatsapp";
+import { acceptLateProof, newHold } from "./holds";
+
+const fmtTime = (d: Date) => new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(d);
 
 type ApptWithCustomer = Prisma.AppointmentGetPayload<{ include: { customer: true; items: true } }>;
 
@@ -53,6 +57,8 @@ export async function sendConfirmation(appointmentId: string) {
     negocio: biz.name,
     servico: a.items.map((i) => i.name).join(" + "),
     startsAt: a.startsAt,
+    endereco: biz.address,
+    mapa: mapsUrl(biz.latitude, biz.longitude),
   });
   await sendText(a.customer.phone, text, { customerId: a.customerId, appointmentId: a.id });
 }
@@ -63,10 +69,11 @@ export async function attachProofFromWhatsApp(phone: string, proof: Buffer, mime
   const appt = await db.appointment.findFirst({
     where: { customerId: phone, status: "PENDING_PAYMENT", payments: { some: { status: { in: ["PENDING", "REJECTED"] } } } },
     orderBy: { createdAt: "desc" },
-    include: { payments: { orderBy: { createdAt: "desc" }, take: 1 }, items: true },
+    include: { payments: { orderBy: { createdAt: "desc" }, take: 1 }, items: true, customer: true },
   });
   const p = appt?.payments[0];
-  if (!appt || !p || !["PENDING", "REJECTED"].includes(p.status)) return { attached: false as const };
+  if (!appt || !p || !["PENDING", "REJECTED"].includes(p.status)) return { attached: false as const, expired: false };
+  if (!(await acceptLateProof(appt))) return { attached: false as const, expired: true };
   await db.payment.update({ where: { id: p.id }, data: { status: "IN_REVIEW", proofData: new Uint8Array(proof), proofMime: mime, rejectReason: null } });
   return { attached: true as const, appointmentId: appt.id, service: appt.items.map((i) => i.name).join(" + "), startsAt: appt.startsAt, ackSent: Boolean(appt.proofAckSentAt) };
 }
@@ -75,10 +82,12 @@ export async function rejectPayment(paymentId: string, reason: string) {
   const p = await db.payment.findUnique({ where: { id: paymentId } });
   if (!p) throw new HttpError(404, "Pagamento não encontrado.");
   if (p.status === "PAID") throw new HttpError(409, "Pagamento já aprovado.");
-  await db.payment.update({
-    where: { id: p.id },
-    data: { status: "REJECTED", rejectReason: reason, reviewedAt: new Date(), proofData: null },
-  });
+  // A recusa dá à cliente um novo prazo de 30 min para enviar outro comprovante (a vaga segue reservada até lá).
+  const hold = newHold();
+  await db.$transaction([
+    db.payment.update({ where: { id: p.id }, data: { status: "REJECTED", rejectReason: reason, reviewedAt: new Date(), proofData: null } }),
+    db.appointment.update({ where: { id: p.appointmentId }, data: { holdUntil: hold } }),
+  ]);
   // Avisa a cliente no WhatsApp com o motivo e o link para reenviar. Falha de envio fica só no histórico.
   const [biz, a] = await Promise.all([
     getBusiness(),
@@ -93,6 +102,7 @@ export async function rejectPayment(paymentId: string, reason: string) {
 ` +
     `Motivo: ${reason}
 ` +
-    `Pode enviar outro comprovante por aqui mesmo` + (link ? ` ou pelo link: ${link}` : "") + `. Sua vaga continua reservada enquanto o comprovante estiver em análise.`;
+    `Pode enviar outro comprovante por aqui mesmo` + (link ? ` ou pelo link: ${link}` : "") + `.\n` +
+    `Sua vaga fica reservada por mais ${HOLD_MINUTES} minutos (até ${fmtTime(hold)}). Depois disso ela é liberada para outras clientes.`;
   await sendText(a.customer.phone, text, { customerId: a.customerId, appointmentId: a.id });
 }
