@@ -67,7 +67,7 @@ export async function runReminders(biz: Biz) {
       servico: a.items.map((i) => i.name).join(" + "),
       startsAt: a.startsAt,
       endereco: biz.address,
-      mapa: mapsUrl(biz.latitude, biz.longitude),
+      mapa: mapsUrl(biz),
     });
     // Marca antes de enviar: falha de envio fica no histórico, sem reenviar em loop.
     await db.appointment.update({ where: { id: a.id }, data: { reminderSentAt: new Date() } });

@@ -1,18 +1,25 @@
 const fmt = (d: Date, opts: Intl.DateTimeFormatOptions) =>
   new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", ...opts }).format(d);
 
-// Link universal do Google Maps: abre o app de mapas no celular (Android/iPhone) já com o destino.
-export const mapsUrl = (lat?: number | null, lng?: number | null) =>
-  lat != null && lng != null ? `https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lng.toFixed(6)}` : null;
+// Link universal do Google Maps (sem chave): abre o app de mapas no celular já com o destino.
+// Usa o endereço cadastrado para o mapa; se só houver coordenadas antigas, usa elas.
+export function mapsUrl(b: { mapsAddress?: string | null; latitude?: number | null; longitude?: number | null }) {
+  const q = (b.mapsAddress ?? "").trim();
+  if (q) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+  if (b.latitude != null && b.longitude != null) return `https://www.google.com/maps/search/?api=1&query=${b.latitude.toFixed(6)},${b.longitude.toFixed(6)}`;
+  return null;
+}
+// Prévia incorporável (iframe) do mesmo endereço.
+export const mapsEmbedUrl = (address: string) => `https://www.google.com/maps?q=${encodeURIComponent(address.trim())}&output=embed`;
 
 export function renderTemplate(
   tpl: string,
   v: { cliente: string; negocio: string; servico: string; startsAt: Date; dias?: number; endereco?: string; mapa?: string | null },
 ) {
   // Se o texto não usa {mapa} mas o estúdio tem localização, o link "Como chegar" entra no fim.
-  if (v.mapa && !tpl.includes("{mapa}")) tpl = `${tpl}
-
-📍 Como chegar: {mapa}`;
+  if (v.mapa && !tpl.includes("{mapa}")) tpl = `${tpl}\n\n📍 Como chegar: {mapa}`;
+  // Sem localização, as linhas que só existem por causa do link saem inteiras.
+  if (!v.mapa) tpl = tpl.split("\n").filter((l) => !l.includes("{mapa}")).join("\n");
   return tpl
     .replaceAll("{dias}", String(v.dias ?? 0))
     .replaceAll("{endereco}", v.endereco ?? "")

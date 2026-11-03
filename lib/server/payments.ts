@@ -58,7 +58,7 @@ export async function sendConfirmation(appointmentId: string) {
     servico: a.items.map((i) => i.name).join(" + "),
     startsAt: a.startsAt,
     endereco: biz.address,
-    mapa: mapsUrl(biz.latitude, biz.longitude),
+    mapa: mapsUrl(biz),
   });
   await sendText(a.customer.phone, text, { customerId: a.customerId, appointmentId: a.id });
 }

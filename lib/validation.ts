@@ -22,6 +22,21 @@ export const businessSchema = z.object({
   openMinutes: z.number().int().min(0).max(1439),
   closeMinutes: z.number().int().min(1).max(1440),
   workDays: z.array(z.number().int().min(0).max(6)).max(7),
+  schedule: z
+    .partialRecord(
+      z.enum(["0", "1", "2", "3", "4", "5", "6"]),
+      z
+        .object({
+          on: z.boolean(),
+          open: z.number().int().min(0).max(1439),
+          lunchStart: z.number().int().min(0).max(1440).nullable(),
+          lunchEnd: z.number().int().min(0).max(1440).nullable(),
+          close: z.number().int().min(1).max(1440),
+        })
+        .refine((d) => !d.on || d.close > d.open, "Fechamento deve ser depois da abertura"),
+    )
+    .optional(),
+  mapsAddress: z.string().trim().max(200).optional(),
   slotStepMinutes: z.number().int().refine((n) => [10, 15, 20, 30, 45, 60].includes(n), "Intervalo inválido"),
   bufferMinutes: z.number().int().min(0).max(120),
   minLeadDays: z.number().int().min(0).max(60),

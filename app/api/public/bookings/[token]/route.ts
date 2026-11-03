@@ -18,7 +18,7 @@ export const GET = handle(async (_req, ctx) => {
     business: {
       name: biz.name,
       address: biz.address,
-      mapsUrl: mapsUrl(biz.latitude, biz.longitude),
+      mapsUrl: mapsUrl(biz),
       logoUrl: biz.hasLogo ? `/api/public/logo?v=${biz.logoVersion}` : null,
       // Número do estúdio (Configurações) para a cliente mandar o comprovante pelo WhatsApp; vazio = botão não aparece.
       whatsapp: biz.phone && biz.waSessionId ? normalizePhone(biz.phone) : null,

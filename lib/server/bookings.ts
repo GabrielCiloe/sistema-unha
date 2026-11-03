@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { HttpError } from "./http";
-import { blockingWhere, leadStart, localToDate, reasonMessage, weekdayOf } from "./slots";
+import { blockingWhere, leadStart, localToDate, reasonMessage } from "./slots";
+import { planRanges, rangesForDate } from "@/lib/schedule";
 import { normalizePhone, phoneVariants } from "./whatsapp";
 import { createDepositPayment } from "./payments";
 import { newHold } from "./holds";
@@ -43,11 +44,10 @@ export async function createBooking(input: {
 
   // O horário precisa estar dentro do expediente de um dia de atendimento (não confia só no que a tela ofereceu).
   const dateStr = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(input.startsAt);
-  if (
-    !biz.workDays.includes(weekdayOf(dateStr)) ||
-    input.startsAt < localToDate(dateStr, biz.openMinutes) ||
-    endsAt > localToDate(dateStr, biz.closeMinutes)
-  )
+  const override = await db.dayOverride.findUnique({ where: { date: dateStr } });
+  const ranges = override ? planRanges(override) : rangesForDate(biz, dateStr);
+  const inside = ranges.some(([o, c]) => input.startsAt >= localToDate(dateStr, o) && endsAt <= localToDate(dateStr, c));
+  if (!inside)
     throw new HttpError(400, "Esse horário está fora do expediente. Escolha outro.");
 
   // Serializable: duas reservas simultâneas no mesmo horário não passam juntas.

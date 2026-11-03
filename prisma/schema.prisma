@@ -56,6 +56,7 @@ model Business {
   name                 String
   phone                String          @default("")
   address              String          @default("")
+  mapsAddress          String          @default("") // endereço completo para o link do Google Maps
   latitude             Float?
   longitude            Float?
   pixKey               String          @default("")
@@ -65,6 +66,7 @@ model Business {
   openMinutes          Int             @default(540)
   closeMinutes         Int             @default(1080)
   workDays             Int[]           @default([1, 2, 3, 4, 5, 6])
+  schedule             Json            @default("{}") // por dia: { "1": { on, open, lunchStart, lunchEnd, close }, ... } (lib/schedule.ts)
   slotStepMinutes      Int             @default(30)
   bufferMinutes         Int             @default(0)
   minLeadDays           Int             @default(2)
@@ -94,6 +96,17 @@ model Business {
   reminderTemplate     String
   rescheduleTemplate   String          @default("")
   updatedAt            DateTime        @updatedAt
+}
+
+// Horário próprio de uma data (AAAA-MM-DD); sem registro, vale a grade semanal de Business.schedule.
+model DayOverride {
+  date       String   @id
+  on         Boolean
+  open       Int
+  lunchStart Int?
+  lunchEnd   Int?
+  close      Int
+  updatedAt  DateTime @updatedAt
 }
 
 model Service {

@@ -134,7 +134,7 @@ export default function BookingPage() {
 
   return (
     <>
-      <BrandHeader name={info.business.name} logoUrl={info.business.logoUrl} tagline={info.business.tagline} />
+      <BrandHeader name={info.business.name} logoUrl={info.business.logoUrl} tagline={info.business.tagline} cover={{ desktop: info.business.coverDesktopUrl, mobile: info.business.coverMobileUrl }} />
 
       <main className="mx-auto max-w-[390px] space-y-[15px] px-5 pb-20">
         <section id="servicos" className="pcard">

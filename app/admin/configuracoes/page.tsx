@@ -2,16 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { PageTitle } from "@/components/admin-shell";
-import { LocationPicker } from "@/components/location-picker";
+import { DayOverrides } from "@/components/day-overrides";
+import { ScheduleEditor } from "@/components/schedule-editor";
 import { Switch } from "@/components/switch";
 import { toast } from "@/components/toast";
 import { DEFAULT_RESCHEDULE_TEMPLATE, DEFAULT_RETURN_TEMPLATE } from "@/lib/defaults";
-import { maskPhone } from "@/lib/templates";
+import { mapsEmbedUrl, mapsUrl, maskPhone } from "@/lib/templates";
+import { readSchedule, summarize, type Schedule } from "@/lib/schedule";
 import { api, useApi } from "@/lib/client";
 import { FormSkeleton } from "@/components/skeleton";
 
 type Biz = {
-  name: string; phone: string; address: string; latitude: number | null; longitude: number | null; pixKey: string; pixName: string; pixCity: string;
+  name: string; phone: string; address: string; mapsAddress: string; latitude: number | null; longitude: number | null; schedule: Schedule; pixKey: string; pixName: string; pixCity: string;
   depositPercent: number; openMinutes: number; closeMinutes: number;
   workDays: number[]; slotStepMinutes: number; bufferMinutes: number; minLeadDays: number; reminderHours: number; waSessionId: string;
   confirmationTemplate: string; reminderTemplate: string; rescheduleTemplate: string;
@@ -28,9 +30,10 @@ const fromTime = (t: string) => {
 export default function Settings() {
   const { data, loading } = useApi<{ business: Biz; env: { whatsapp: boolean } }>("/api/admin/business");
   const [b, setB] = useState<Biz | null>(null);
+  const [mapPreview, setMapPreview] = useState("");
 
   useEffect(() => {
-    if (data) setB({ ...data.business, returnTemplate: data.business.returnTemplate || DEFAULT_RETURN_TEMPLATE, rescheduleTemplate: data.business.rescheduleTemplate || DEFAULT_RESCHEDULE_TEMPLATE });
+    if (data) setB({ ...data.business, schedule: readSchedule(data.business), returnTemplate: data.business.returnTemplate || DEFAULT_RETURN_TEMPLATE, rescheduleTemplate: data.business.rescheduleTemplate || DEFAULT_RESCHEDULE_TEMPLATE });
   }, [data]);
 
   if (loading || !b || !data) return <FormSkeleton />;
@@ -41,7 +44,8 @@ export default function Settings() {
     if (!b) return;
     try {
       // O schema do servidor descarta campos extras (id, updatedAt).
-      await api("/api/admin/business", { method: "PUT", body: b });
+      // Dias/abertura/fechamento antigos são derivados da grade por dia (compatibilidade).
+      await api("/api/admin/business", { method: "PUT", body: { ...b, ...summarize(b.schedule) } });
       toast("Configurações salvas com sucesso!");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Erro", false);
@@ -61,19 +65,32 @@ export default function Settings() {
 
         <section className="card grid gap-3">
           <h2 className="font-semibold">Localização no mapa</h2>
-          <p className="text-xs text-muted">Marque onde fica o estúdio. O link do mapa vai junto na confirmação e no lembrete, para a cliente abrir no app de navegação do celular.</p>
-          <LocationPicker lat={b.latitude} lng={b.longitude} address={b.address} onChange={(lat, lng) => setB({ ...b, latitude: lat, longitude: lng })} />
+          <p className="text-xs text-muted">Endereço completo para o Google Maps. O link vai junto na confirmação, no lembrete e na página da reserva, e abre o app de navegação do celular.</p>
+          <div>
+            <label className="label" htmlFor="mapsAddress">Endereço para o mapa (rua, número, bairro, cidade - UF)</label>
+            <input id="mapsAddress" className="input" placeholder="Ex.: Rua Arlindo Ferreira de Camargo, 100, Centro, Engenheiro Coelho - SP" value={b.mapsAddress} onChange={(e) => set("mapsAddress", e.target.value)} onBlur={(e) => setMapPreview(e.target.value.trim())} />
+          </div>
+          {(mapPreview || b.mapsAddress.trim()) ? (
+            <>
+              <iframe title="Prévia do mapa" src={mapsEmbedUrl(mapPreview || b.mapsAddress)} className="h-72 w-full rounded-xl border border-line bg-surface-2" loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+              <a href={mapsUrl({ mapsAddress: mapPreview || b.mapsAddress }) ?? "#"} target="_blank" rel="noopener" className="text-sm text-brand-soft underline">Abrir no Google Maps (é este link que a cliente recebe)</a>
+              <p className="text-xs text-muted">Se a prévia mostrar o lugar errado, complete o endereço com bairro e cidade.</p>
+            </>
+          ) : (
+            <p className="text-xs text-muted">Sem endereço: as mensagens vão sem o link do mapa.</p>
+          )}
         </section>
 
         <section className="card grid gap-4 sm:grid-cols-2">
           <h2 className="font-semibold sm:col-span-2">Horários</h2>
-          <div>
-            <label className="label" htmlFor="open">Abertura</label>
-            <input id="open" type="time" className="input" value={toTime(b.openMinutes)} onChange={(e) => set("openMinutes", fromTime(e.target.value))} />
+          <div className="sm:col-span-2">
+            <p className="mb-3 text-xs text-muted">Clique num dia para ajustar só aquela data (folga, feriado ou horário diferente do padrão). "Aplicar à semana inteira" copia o horário para a semana toda. Esses ajustes são salvos na hora.</p>
+            <DayOverrides schedule={b.schedule} />
           </div>
-          <div>
-            <label className="label" htmlFor="close">Fechamento</label>
-            <input id="close" type="time" className="input" value={toTime(b.closeMinutes)} onChange={(e) => set("closeMinutes", fromTime(e.target.value))} />
+          <div className="sm:col-span-2 border-t border-line pt-4">
+            <h3 className="mb-1 font-medium">Horários padrão</h3>
+            <p className="mb-3 text-xs text-muted">Horário base de cada dia da semana. Vale para todas as datas que não tiverem ajuste no calendário. Salve com o botão no fim da página.</p>
+            <ScheduleEditor value={b.schedule} onChange={(v) => set("schedule", v)} />
           </div>
           <div>
             <label className="label" htmlFor="step">Intervalo entre as opções de horário</label>
@@ -92,17 +109,6 @@ export default function Settings() {
             <input id="lead" type="number" min={0} max={60} className="input" value={b.minLeadDays} onChange={(e) => set("minLeadDays", Number(e.target.value))} />
             <p className="mt-1 text-xs text-muted">A cliente só vê horários a partir de hoje + esse número de dias. Com 2, quem agenda hoje encontra vagas a partir de depois de amanhã. Use 0 para permitir hoje mesmo.</p>
           </div>
-          <fieldset>
-            <legend className="label">Dias de atendimento</legend>
-            <div className="flex flex-wrap gap-1.5">
-              {DAYS.map((d, i) => (
-                <label key={d} className={`badge cursor-pointer border ${b.workDays.includes(i) ? "border-brand-soft bg-brand/20 text-brand-soft" : "border-line text-muted"}`}>
-                  <input type="checkbox" className="sr-only" checked={b.workDays.includes(i)} onChange={() => set("workDays", b.workDays.includes(i) ? b.workDays.filter((x) => x !== i) : [...b.workDays, i].sort())} />
-                  {d}
-                </label>
-              ))}
-            </div>
-          </fieldset>
         </section>
 
         <section className="card grid gap-4 sm:grid-cols-2">

@@ -64,7 +64,7 @@ export const POST = handle(async (req, ctx) => {
     servico: a.items.map((i) => i.name).join(" + "),
     startsAt: start,
     endereco: biz.address,
-    mapa: mapsUrl(biz.latitude, biz.longitude),
+    mapa: mapsUrl(biz),
   });
   const sent = await sendText(a.customer.phone, text, { customerId: a.customerId, appointmentId: a.id });
   return json({ ok: true, startsAt: start, endsAt: end, sent });

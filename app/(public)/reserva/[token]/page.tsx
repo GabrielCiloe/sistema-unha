@@ -26,8 +26,8 @@ const fmtLong = (iso: string) => {
 // Cartão de aviso do Figma: fundo quase branco, borda suave, sombra e ícone de check em caixa rosé.
 function Notice({ children }: { children: React.ReactNode }) {
   return (
-    <div role="status" className="flex items-center gap-[10px] rounded-[10px] border border-accent/50 bg-[#fbfafd] px-[15px] py-[25px] shadow-[0_4px_2px_rgba(0,0,0,0.25)]">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-[4px] bg-accent/5 text-brand"><CircleCheck size={24} fill="currentColor" className="text-brand [&>path]:stroke-white" aria-hidden /></span>
+    <div role="status" className="flex items-center gap-[10px] rounded-[10px] border border-accent/50 bg-surface px-[15px] py-[25px] shadow-[0_4px_2px_rgba(0,0,0,0.15)]">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-[4px] bg-accent/5 text-brand"><CircleCheck size={24} fill="currentColor" className="text-brand [&>path]:stroke-surface" aria-hidden /></span>
       <p className="text-[14px] font-medium leading-[1.4] text-ink">{children}</p>
     </div>
   );

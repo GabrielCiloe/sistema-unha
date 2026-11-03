@@ -244,39 +244,58 @@ export default function Personalization() {
             style={valid ? (themeVars(theme, previewMode) as React.CSSProperties) : undefined}
             className="overflow-hidden rounded-2xl border border-line bg-background text-ink"
           >
-            <div className="relative isolate overflow-hidden border-b border-line px-5 pb-8 pt-9 text-center">
-              {(data.hasCoverDesktop || data.hasCoverMobile) && (
-                <div
-                  aria-hidden
-                  className="absolute inset-0 -z-20 bg-cover bg-center"
-                  style={{ backgroundImage: `url(/api/public/cover?kind=${data.hasCoverMobile ? "mobile" : "desktop"}&v=${data.coverVersion})` }}
-                />
-              )}
+            {/* Mesma composição da página da cliente: luzes da marca, banner com degradê, logo grande e cartão de serviços. */}
+            <div className="relative isolate overflow-hidden">
               <div
                 aria-hidden
-                className="absolute inset-0 -z-10"
-                style={{ background: `${data.hasCoverDesktop || data.hasCoverMobile ? "linear-gradient(color-mix(in srgb, var(--color-background) 55%, transparent), color-mix(in srgb, var(--color-background) 80%, transparent)), " : ""}radial-gradient(ellipse 80% 90% at 15% 0%, color-mix(in srgb, var(--color-brand) 38%, transparent), transparent 62%), radial-gradient(ellipse 70% 80% at 90% 10%, color-mix(in srgb, var(--color-accent) 28%, transparent), transparent 60%)` }}
+                className="pointer-events-none absolute inset-0 -z-20"
+                style={{ background: "radial-gradient(ellipse 70% 50% at 10% 0%, color-mix(in srgb, var(--color-brand) 22%, transparent), transparent 60%), radial-gradient(ellipse 60% 45% at 95% 15%, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 60%)" }}
               />
-              <div
-                className="mx-auto flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-line bg-surface bg-cover bg-center"
-                style={logoUrl ? { backgroundImage: `url(${logoUrl})` } : undefined}
-              >
-                {!logoUrl && <Sparkles size={30} className="text-accent" />}
+              <div className="relative isolate overflow-hidden px-5 pb-6 pt-8 text-center">
+                {(data.hasCoverDesktop || data.hasCoverMobile) && (
+                  <>
+                    <div
+                      aria-hidden
+                      className="absolute inset-0 -z-20 bg-cover bg-center"
+                      style={{ backgroundImage: `url(/api/public/cover?kind=${data.hasCoverMobile ? "mobile" : "desktop"}&v=${data.coverVersion})`, WebkitMaskImage: "linear-gradient(to bottom, black 45%, transparent 92%)", maskImage: "linear-gradient(to bottom, black 45%, transparent 92%)" }}
+                    />
+                    <div
+                      aria-hidden
+                      className="absolute inset-0 -z-10"
+                      style={{ background: "linear-gradient(180deg, color-mix(in srgb, var(--color-background) 10%, transparent) 0%, color-mix(in srgb, color-mix(in srgb, var(--color-background) 52%, var(--color-brand)) 85%, transparent) 50%, color-mix(in srgb, var(--color-background) 60%, transparent) 80%, transparent 100%)" }}
+                    />
+                  </>
+                )}
+                {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoUrl} alt="" className="mx-auto h-auto w-56 max-w-full object-contain" />
+                ) : (
+                  <p className="text-2xl font-semibold text-accent">{data.name}</p>
+                )}
+                {tagline && <p className="mt-2 text-xs text-muted">{tagline}</p>}
               </div>
-              <p className="mt-3 text-xl font-semibold">{data.name}</p>
-              {tagline && <p className="mt-1 text-sm text-muted">{tagline}</p>}
-              <span className="btn-primary mt-4 px-5">Agendar horário</span>
-            </div>
-            <div className="space-y-3 p-4">
-              <div className="rounded-xl border border-brand-soft bg-brand/15 p-3 text-sm">
-                <p className="font-medium">Manicure</p>
-                <p className="text-xs text-muted">45 min · R$ 45,00</p>
+              <div className="px-4 pb-4">
+                <div className="rounded-[10px] border border-accent bg-surface p-4">
+                  <p className="mb-3 text-[14px] font-semibold">1.Escolha o serviço</p>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3 rounded-[10px] border-2 border-brand bg-brand/10 p-3 text-left">
+                      <span>
+                        <span className="block text-[13px] font-bold">Manicure</span>
+                        <span className="block text-[11px] text-muted">Duração: 45 min</span>
+                      </span>
+                      <span className="text-[13px] font-bold">R$ 45,00</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 rounded-[10px] border border-brand/10 bg-brand/5 p-3 text-left">
+                      <span>
+                        <span className="block text-[13px] font-bold">Pedicure</span>
+                        <span className="block text-[11px] text-muted">Duração: 1h</span>
+                      </span>
+                      <span className="text-[13px] font-bold">R$ 55,00</span>
+                    </div>
+                  </div>
+                  <span className="mt-4 flex h-11 items-center justify-center rounded-[8px] bg-accent text-[14px] font-bold text-white">Reservar e pagar o sinal</span>
+                </div>
               </div>
-              <div className="rounded-xl border border-line bg-surface p-3 text-sm">
-                <p className="font-medium">Pedicure</p>
-                <p className="text-xs text-muted">60 min · R$ 55,00</p>
-              </div>
-              <span className="btn-confirm w-full">Reservar e pagar o sinal</span>
             </div>
           </div>
         </aside>

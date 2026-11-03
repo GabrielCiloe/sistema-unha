@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { longestRange, rangesForDate, type DayPlan } from "@/lib/schedule";
 
 // Brasil (sem horário de verão desde 2019): offset fixo -03:00.
 const TZ_OFFSET_MIN = -180;
@@ -23,6 +24,8 @@ export type SlotBiz = {
   slotStepMinutes: number;
   bufferMinutes: number;
   minLeadDays: number;
+  schedule?: unknown; // grade por dia (lib/schedule.ts); sem ela valem workDays/openMinutes/closeMinutes
+  overrides?: Record<string, DayPlan>; // ajustes por data (DayOverride), carregados por loadBiz
 };
 
 export const todayLocal = (nowMs: number) => new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(new Date(nowMs));
@@ -60,53 +63,60 @@ type Busy = { startsAt: Date; endsAt: Date };
 // slotStepMinutes em slotStepMinutes. Um horário é oferecido quando o serviço (e a pausa) cabe num período livre.
 // Assim a cliente, o reagendamento e a listagem da dona mostram sempre os mesmos horários padronizados.
 export function daySlots(biz: SlotBiz, dateStr: string, duration: number, busy: Busy[], nowMs: number): DayResult {
-  if (!biz.workDays.includes(weekdayOf(dateStr))) return { slots: [], reason: "closed" };
+  const ranges = rangesForDate(biz, dateStr);
+  if (ranges.length === 0) return { slots: [], reason: "closed" };
 
-  const open = localToDate(dateStr, biz.openMinutes).getTime();
-  const close = localToDate(dateStr, biz.closeMinutes).getTime();
   const dur = duration * MIN;
   const buffer = biz.bufferMinutes * MIN;
   const step = biz.slotStepMinutes * MIN;
-  if (dur > close - open) return { slots: [], reason: "too_long" };
+  const spans = ranges.map(([o, c]) => [localToDate(dateStr, o).getTime(), localToDate(dateStr, c).getTime()] as [number, number]);
+  if (spans.every(([open, close]) => dur > close - open)) return { slots: [], reason: "too_long" };
 
-  // Ocupado = atendimento + pausa depois dele; junta sobreposições e recorta no expediente.
-  const blocks = busy
-    .map((b) => [Math.max(b.startsAt.getTime(), open), Math.min(b.endsAt.getTime() + buffer, close)] as [number, number])
-    .filter(([a, b]) => b > a)
-    .sort((x, y) => x[0] - y[0]);
-  const merged: [number, number][] = [];
-  for (const blk of blocks) {
-    const last = merged[merged.length - 1];
-    if (last && blk[0] <= last[1]) last[1] = Math.max(last[1], blk[1]);
-    else merged.push([...blk]);
-  }
-
-  // Períodos livres entre os bloqueios.
-  const free: [number, number][] = [];
-  let cursor = open;
-  for (const [a, b] of merged) {
-    if (a > cursor) free.push([cursor, a]);
-    cursor = Math.max(cursor, b);
-  }
-  if (cursor < close) free.push([cursor, close]);
-
-  // Antecedencia minima: alguns minutos a partir de agora e, se configurado, so a partir de hoje + N dias.
-  const earliest = Math.max(nowMs + MIN_LEAD_MINUTES * MIN, leadStart(biz, nowMs).getTime());
   const all: number[] = [];
-  for (let s = open; s + dur <= close; s += step) {
-    // O serviço precisa caber num período livre; se o período termina num atendimento, respeita a pausa antes dele.
-    const fits = free.some(([a, b]) => s >= a && s + dur + (b === close ? 0 : buffer) <= b);
-    if (fits) all.push(s);
+  for (const [open, close] of spans) {
+    // Ocupado = atendimento + pausa depois dele; junta sobreposições e recorta no período.
+    const blocks = busy
+      .map((b) => [Math.max(b.startsAt.getTime(), open), Math.min(b.endsAt.getTime() + buffer, close)] as [number, number])
+      .filter(([a, b]) => b > a)
+      .sort((x, y) => x[0] - y[0]);
+    const merged: [number, number][] = [];
+    for (const blk of blocks) {
+      const last = merged[merged.length - 1];
+      if (last && blk[0] <= last[1]) last[1] = Math.max(last[1], blk[1]);
+      else merged.push([...blk]);
+    }
+    const free: [number, number][] = [];
+    let cursor = open;
+    for (const [a, b] of merged) {
+      if (a > cursor) free.push([cursor, a]);
+      cursor = Math.max(cursor, b);
+    }
+    if (cursor < close) free.push([cursor, close]);
+    // Grade fixa a partir da abertura do período; o serviço (e a pausa) precisa caber num trecho livre.
+    for (let s = open; s + dur <= close; s += step) {
+      if (free.some(([a, b]) => s >= a && s + dur + (b === close ? 0 : buffer) <= b)) all.push(s);
+    }
   }
 
+  // Antecedência mínima: alguns minutos a partir de agora e, se configurado, só a partir de hoje + N dias.
+  const earliest = Math.max(nowMs + MIN_LEAD_MINUTES * MIN, leadStart(biz, nowMs).getTime());
   if (all.length === 0) return { slots: [], reason: "full" };
   const future = all.filter((s) => s >= earliest);
-  if (future.length === 0) return { slots: [], reason: close <= leadStart(biz, nowMs).getTime() && biz.minLeadDays > 0 ? "too_soon" : "passed" };
+  const lastClose = spans[spans.length - 1][1];
+  if (future.length === 0) return { slots: [], reason: lastClose <= leadStart(biz, nowMs).getTime() && biz.minLeadDays > 0 ? "too_soon" : "passed" };
   return { slots: future.map((s) => new Date(s).toISOString()), reason: null };
 }
 
-export async function loadBiz() {
-  return db.business.findUnique({ where: { id: "main" } });
+// Estúdio + ajustes por data do período pedido (para a grade do dia considerar dias fechados/alterados).
+export async function loadBiz(from?: string, to?: string) {
+  const biz = await db.business.findUnique({ where: { id: "main" } });
+  if (!biz) return null;
+  const overrides: Record<string, DayPlan> = {};
+  if (from) {
+    const rows = await db.dayOverride.findMany({ where: { date: { gte: from, lte: to ?? from } } });
+    for (const r of rows) overrides[r.date] = { on: r.on, open: r.open, lunchStart: r.lunchStart, lunchEnd: r.lunchEnd, close: r.close };
+  }
+  return { ...biz, overrides };
 }
 
 // Reagendamento pelo estúdio: sem a antecedência mínima em dias e sem contar o próprio atendimento como ocupado.
@@ -122,7 +132,7 @@ export async function loadBusy(from: Date, to: Date, bufferMin: number, excludeI
 }
 
 export async function availableSlots(dateStr: string, durationMin: number, opts?: SlotOpts): Promise<DayResult> {
-  const biz = await loadBiz();
+  const biz = await loadBiz(dateStr);
   if (!biz) return { slots: [], reason: "closed" };
   const busy = await loadBusy(localToDate(dateStr, 0), localToDate(dateStr, 24 * 60), biz.bufferMinutes, opts?.excludeId);
   return daySlots(applyOpts(biz, opts), dateStr, durationMin, busy, Date.now());
@@ -130,7 +140,7 @@ export async function availableSlots(dateStr: string, durationMin: number, opts?
 
 // Disponibilidade de vários dias com uma única consulta ao banco.
 export async function availabilityForDays(dates: string[], durationMin: number, opts?: SlotOpts) {
-  const loaded = await loadBiz();
+  const loaded = dates.length ? await loadBiz(dates[0], dates[dates.length - 1]) : null;
   if (!loaded || dates.length === 0) return { biz: loaded, days: [] as { date: string; count: number; reason: DayReason | null }[] };
   const biz = applyOpts(loaded, opts);
   const busy = await loadBusy(localToDate(dates[0], 0), localToDate(dates[dates.length - 1], 24 * 60), biz.bufferMinutes, opts?.excludeId);
@@ -144,28 +154,31 @@ export async function availabilityForDays(dates: string[], durationMin: number, 
   };
 }
 
-// Períodos livres do dia (expediente menos atendimentos + pausa): a dona vê onde ainda cabe um encaixe.
+// Períodos livres do dia (expediente menos atendimentos + pausa) e os horários da grade: a dona vê onde cabe um encaixe.
 export async function freePeriods(dateStr: string) {
-  const biz = await loadBiz();
-  if (!biz) return { closed: true, periods: [] as { from: string; to: string; minutes: number }[], slots: [] as string[] };
-  if (!biz.workDays.includes(weekdayOf(dateStr))) return { closed: true, periods: [], slots: [] };
-  const open = localToDate(dateStr, biz.openMinutes).getTime();
-  const close = localToDate(dateStr, biz.closeMinutes).getTime();
+  const biz = await loadBiz(dateStr);
+  const empty = { closed: true, periods: [] as { from: string; to: string; minutes: number }[], slots: [] as string[] };
+  if (!biz) return empty;
+  const ranges = rangesForDate(biz, dateStr);
+  if (ranges.length === 0) return empty;
   const buffer = biz.bufferMinutes * MIN;
   const busy = await loadBusy(localToDate(dateStr, 0), localToDate(dateStr, 24 * 60), biz.bufferMinutes);
-  const blocks = busy
-    .map((b) => [Math.max(b.startsAt.getTime(), open), Math.min(b.endsAt.getTime() + buffer, close)] as [number, number])
-    .filter(([a, b]) => b > a)
-    .sort((x, y) => x[0] - y[0]);
   const periods: { from: string; to: string; minutes: number }[] = [];
-  let cursor = open;
-  const push = (a: number, b: number) => b - a >= biz.slotStepMinutes * MIN && periods.push({ from: new Date(a).toISOString(), to: new Date(b).toISOString(), minutes: Math.round((b - a) / MIN) });
-  for (const [a, b] of blocks) {
-    if (a > cursor) push(cursor, a);
-    cursor = Math.max(cursor, b);
+  for (const [o, c] of ranges) {
+    const open = localToDate(dateStr, o).getTime();
+    const close = localToDate(dateStr, c).getTime();
+    const blocks = busy
+      .map((b) => [Math.max(b.startsAt.getTime(), open), Math.min(b.endsAt.getTime() + buffer, close)] as [number, number])
+      .filter(([a, b]) => b > a)
+      .sort((x, y) => x[0] - y[0]);
+    let cursor = open;
+    const push = (a: number, b: number) => b - a >= biz.slotStepMinutes * MIN && periods.push({ from: new Date(a).toISOString(), to: new Date(b).toISOString(), minutes: Math.round((b - a) / MIN) });
+    for (const [a, b] of blocks) {
+      if (a > cursor) push(cursor, a);
+      cursor = Math.max(cursor, b);
+    }
+    if (cursor < close) push(cursor, close);
   }
-  if (cursor < close) push(cursor, close);
-  // Horários de slotStepMinutes em slotStepMinutes dentro dos períodos livres (como a cliente vê), sem antecedência em dias.
   const slots = daySlots({ ...biz, minLeadDays: 0 }, dateStr, biz.slotStepMinutes, busy, Date.now()).slots;
   return { closed: false, periods, slots };
 }
@@ -183,8 +196,11 @@ export function reasonMessage(reason: DayReason, durationMin: number, biz: SlotB
   switch (reason) {
     case "closed":
       return "Não atendemos neste dia da semana. Escolha outra data.";
-    case "too_long":
-      return `Os serviços escolhidos somam ${fmtMinutes(durationMin)}, mas o expediente (${hhmm(biz.openMinutes)} às ${hhmm(biz.closeMinutes)}) tem ${fmtMinutes(biz.closeMinutes - biz.openMinutes)}. Escolha menos serviços para agendar.`;
+    case "too_long": {
+      const r = longestRange(biz);
+      const span = r ? `o maior período de atendimento (${hhmm(r[0])} às ${hhmm(r[1])}) tem ${fmtMinutes(r[1] - r[0])}` : "não há período de atendimento cadastrado";
+      return `Os serviços escolhidos somam ${fmtMinutes(durationMin)}, mas ${span}. Escolha menos serviços para agendar.`;
+    }
     case "full":
       return `Não há um intervalo livre de ${fmtMinutes(durationMin)} seguidos neste dia (agenda cheia ou o que resta é menor que o tempo dos serviços). Tente outra data ou escolha menos serviços.`;
     case "passed":
