@@ -3,12 +3,11 @@
 import { useEffect, useState } from "react";
 import { PageTitle } from "@/components/admin-shell";
 import { DayOverrides } from "@/components/day-overrides";
-import { LocationPicker } from "@/components/location-picker";
 import { ScheduleEditor } from "@/components/schedule-editor";
 import { Switch } from "@/components/switch";
 import { toast } from "@/components/toast";
 import { DEFAULT_RESCHEDULE_TEMPLATE, DEFAULT_RETURN_TEMPLATE } from "@/lib/defaults";
-import { maskPhone } from "@/lib/templates";
+import { mapsEmbedUrl, mapsUrl, maskPhone } from "@/lib/templates";
 import { readSchedule, summarize, type Schedule } from "@/lib/schedule";
 import { api, useApi } from "@/lib/client";
 import { FormSkeleton } from "@/components/skeleton";
@@ -31,6 +30,7 @@ const fromTime = (t: string) => {
 export default function Settings() {
   const { data, loading } = useApi<{ business: Biz; env: { whatsapp: boolean } }>("/api/admin/business");
   const [b, setB] = useState<Biz | null>(null);
+  const [mapPreview, setMapPreview] = useState("");
 
   useEffect(() => {
     if (data) setB({ ...data.business, schedule: readSchedule(data.business), returnTemplate: data.business.returnTemplate || DEFAULT_RETURN_TEMPLATE, rescheduleTemplate: data.business.rescheduleTemplate || DEFAULT_RESCHEDULE_TEMPLATE });
@@ -65,12 +65,20 @@ export default function Settings() {
 
         <section className="card grid gap-3">
           <h2 className="font-semibold">Localização no mapa</h2>
-          <p className="text-xs text-muted">Marque onde fica o estúdio. O link do mapa vai junto na confirmação, no lembrete e na página da reserva, e abre o app de navegação do celular.</p>
+          <p className="text-xs text-muted">Endereço completo para o Google Maps. O link vai junto na confirmação, no lembrete e na página da reserva, e abre o app de navegação do celular.</p>
           <div>
             <label className="label" htmlFor="mapsAddress">Endereço para o mapa (rua, número, bairro, cidade - UF)</label>
-            <input id="mapsAddress" className="input" placeholder="Ex.: Rua Arlindo Ferreira de Camargo, 100, Centro, Engenheiro Coelho - SP" value={b.mapsAddress} onChange={(e) => set("mapsAddress", e.target.value)} />
+            <input id="mapsAddress" className="input" placeholder="Ex.: Rua Arlindo Ferreira de Camargo, 100, Centro, Engenheiro Coelho - SP" value={b.mapsAddress} onChange={(e) => set("mapsAddress", e.target.value)} onBlur={(e) => setMapPreview(e.target.value.trim())} />
           </div>
-          <LocationPicker lat={b.latitude} lng={b.longitude} address={b.mapsAddress || b.address} onChange={(lat, lng) => setB({ ...b, latitude: lat, longitude: lng })} />
+          {(mapPreview || b.mapsAddress.trim()) ? (
+            <>
+              <iframe title="Prévia do mapa" src={mapsEmbedUrl(mapPreview || b.mapsAddress)} className="h-72 w-full rounded-xl border border-line bg-surface-2" loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+              <a href={mapsUrl({ mapsAddress: mapPreview || b.mapsAddress }) ?? "#"} target="_blank" rel="noopener" className="text-sm text-brand-soft underline">Abrir no Google Maps (é este link que a cliente recebe)</a>
+              <p className="text-xs text-muted">Se a prévia mostrar o lugar errado, complete o endereço com bairro e cidade.</p>
+            </>
+          ) : (
+            <p className="text-xs text-muted">Sem endereço: as mensagens vão sem o link do mapa.</p>
+          )}
         </section>
 
         <section className="card grid gap-4 sm:grid-cols-2">
