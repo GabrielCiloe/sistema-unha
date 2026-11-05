@@ -2,15 +2,13 @@ const fmt = (d: Date, opts: Intl.DateTimeFormatOptions) =>
   new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", ...opts }).format(d);
 
 // Link universal do Google Maps (sem chave): abre o app de mapas no celular já com o destino.
-// Usa o endereço cadastrado para o mapa; se só houver coordenadas antigas, usa elas.
+// O pino marcado em Configurações (coordenadas) é o ponto exato e tem prioridade; sem pino, usa o endereço digitado.
 export function mapsUrl(b: { mapsAddress?: string | null; latitude?: number | null; longitude?: number | null }) {
+  if (b.latitude != null && b.longitude != null) return `https://www.google.com/maps/search/?api=1&query=${b.latitude.toFixed(6)},${b.longitude.toFixed(6)}`;
   const q = (b.mapsAddress ?? "").trim();
   if (q) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
-  if (b.latitude != null && b.longitude != null) return `https://www.google.com/maps/search/?api=1&query=${b.latitude.toFixed(6)},${b.longitude.toFixed(6)}`;
   return null;
 }
-// Prévia incorporável (iframe) do mesmo endereço.
-export const mapsEmbedUrl = (address: string) => `https://www.google.com/maps?q=${encodeURIComponent(address.trim())}&output=embed`;
 
 export function renderTemplate(
   tpl: string,
