@@ -1,3 +1,6 @@
+// Opções de "Intervalo entre as opções de horário" (Configurações), em minutos. A validação do servidor usa a mesma lista.
+export const SLOT_STEP_OPTIONS = [10, 15, 20, 30, 45, 60, 75, 90, 105, 120] as const;
+
 // Convite para a cliente voltar. Várias versões separadas por uma linha "---" são sorteadas a cada envio.
 export const DEFAULT_RETURN_TEMPLATE =
   "Oi {cliente}! Faz {dias} dias que você fez {servico} aqui no {negocio}. Que tal renovar? Responda aqui para agendar um horário. 💅\n---\nOlá {cliente}, tudo bem? Já faz um tempinho desde o seu último atendimento no {negocio}. Quer reservar um horário para renovar? Responda aqui. 💖\n---\nSentimos sua falta, {cliente}! Se quiser renovar {servico}, é só responder esta mensagem que a gente encontra um horário. Para não receber mais convites, responda SAIR.";

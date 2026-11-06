@@ -6,7 +6,7 @@ import { DayOverrides } from "@/components/day-overrides";
 import { ScheduleEditor } from "@/components/schedule-editor";
 import { Switch } from "@/components/switch";
 import { toast } from "@/components/toast";
-import { DEFAULT_RESCHEDULE_TEMPLATE, DEFAULT_RETURN_TEMPLATE } from "@/lib/defaults";
+import { DEFAULT_RESCHEDULE_TEMPLATE, DEFAULT_RETURN_TEMPLATE, SLOT_STEP_OPTIONS } from "@/lib/defaults";
 import { mapsEmbedUrl, mapsUrl, maskPhone } from "@/lib/templates";
 import { readSchedule, summarize, type Schedule } from "@/lib/schedule";
 import { api, useApi } from "@/lib/client";
@@ -95,7 +95,11 @@ export default function Settings() {
           <div>
             <label className="label" htmlFor="step">Intervalo entre as opções de horário</label>
             <select id="step" className="input" value={b.slotStepMinutes} onChange={(e) => set("slotStepMinutes", Number(e.target.value))}>
-              {[10, 15, 20, 30, 45, 60].map((n) => <option key={n} value={n}>{n} min</option>)}
+              {SLOT_STEP_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n} min{n >= 60 ? ` (${Math.floor(n / 60)}h${n % 60 ? String(n % 60).padStart(2, "0") : ""})` : ""}
+                </option>
+              ))}
             </select>
             <p className="mt-1 text-xs text-muted">De quanto em quanto tempo aparece um horário, sempre contando a partir da abertura (ex.: 09:00, 09:30, 10:00). Vale para a cliente, para o reagendamento e para os horários livres na Agenda.</p>
           </div>

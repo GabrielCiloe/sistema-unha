@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SLOT_STEP_OPTIONS } from "./defaults";
 
 export const serviceSchema = z.object({
   name: z.string().trim().min(2).max(80),
@@ -37,7 +38,7 @@ export const businessSchema = z.object({
     )
     .optional(),
   mapsAddress: z.string().trim().max(200).optional(),
-  slotStepMinutes: z.number().int().refine((n) => [10, 15, 20, 30, 45, 60].includes(n), "Intervalo inválido"),
+  slotStepMinutes: z.number().int().refine((n) => (SLOT_STEP_OPTIONS as readonly number[]).includes(n), "Intervalo inválido"),
   bufferMinutes: z.number().int().min(0).max(120),
   minLeadDays: z.number().int().min(0).max(60),
   reminderHours: z.number().int().min(1).max(72),
