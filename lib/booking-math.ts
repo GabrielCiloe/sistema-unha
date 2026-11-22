@@ -17,6 +17,13 @@ export function bookingLines<S extends PricedService>(services: S[], missingNail
   });
 }
 
+// Até quando a reserva sem sinal segura a vaga. Página pública: prazo curto (holdMinutes a partir de agora).
+// Agendamento interno (ADMIN): até o horário do atendimento. A dona combinou direto com a cliente e a vaga não expira em 30 min.
+export function holdUntilFor(source: "PUBLIC" | "ADMIN", startsAt: Date, nowMs: number, holdMinutes: number) {
+  const short = new Date(nowMs + holdMinutes * 60_000);
+  return source === "ADMIN" && startsAt.getTime() > short.getTime() ? startsAt : short;
+}
+
 // Sinal: percentual do total, arredondado ao centavo, nunca menos de 1 centavo.
 export const depositCentsFor = (totalCents: number, depositPercent: number) => Math.max(1, Math.round((totalCents * depositPercent) / 100));
 

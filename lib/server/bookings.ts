@@ -1,11 +1,14 @@
 import { db } from "./db";
 import { HttpError } from "./http";
-import { blockingWhere, leadStart, localToDate, reasonMessage, todayLocal } from "./slots";
+import { blockingWhere, HOLD_MINUTES, leadStart, localToDate, reasonMessage, todayLocal } from "./slots";
 import { fromTime, planRanges, rangesForDate } from "@/lib/schedule";
 import { normalizePhone, phoneVariants } from "./whatsapp";
 import { createDepositPayment } from "./payments";
-import { newHold } from "./holds";
-import { bookingTotals } from "@/lib/booking-math";
+import { bookingTotals, holdUntilFor } from "@/lib/booking-math";
+
+const TAKEN = "Esse horário acabou de ser ocupado. Escolha outro.";
+// Transação Serializable abortada pelo banco (duas reservas disputando o mesmo horário): o Prisma devolve P2034.
+export const isWriteConflict = (e: unknown) => typeof e === "object" && e !== null && (e as { code?: unknown }).code === "P2034";
 
 // Opções do agendamento interno (painel). Sem elas, valem as regras da página pública.
 export type BookingOpts = {
@@ -68,10 +71,12 @@ export async function createBooking(
   }
 
   // Serializable: duas reservas simultâneas no mesmo horário não passam juntas.
-  const appt = await db.$transaction(
+  const source = opts.source ?? "PUBLIC";
+  const appt = await db
+    .$transaction(
     async (tx) => {
       const clash = await tx.appointment.findFirst({ where: blockingWhere(startsAt, endsAt, biz.bufferMinutes), select: { id: true } });
-      if (clash) throw new HttpError(409, "Esse horário acabou de ser ocupado. Escolha outro.");
+      if (clash) throw new HttpError(409, TAKEN);
       const customer = await tx.customer.upsert({
         where: { phone },
         update: { name: input.name },
@@ -82,8 +87,9 @@ export async function createBooking(
           customerId: customer.phone,
           startsAt,
           endsAt,
-          holdUntil: newHold(),
-          source: opts.source ?? "PUBLIC",
+          // Pública: 30 min para o sinal. Interna: a vaga fica bloqueada até o horário do atendimento.
+          holdUntil: holdUntilFor(source, startsAt, Date.now(), HOLD_MINUTES),
+          source,
           totalCents,
           depositCents,
           notes: input.notes ?? "",
@@ -102,7 +108,12 @@ export async function createBooking(
       });
     },
     { isolationLevel: "Serializable" },
-  );
+    )
+    .catch((e) => {
+      // Quem perde a disputa pelo horário recebe o mesmo 409 de "ocupado", não um erro interno.
+      if (isWriteConflict(e)) throw new HttpError(409, TAKEN);
+      throw e;
+    });
 
   try {
     const payment = await createDepositPayment(appt);

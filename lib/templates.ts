@@ -51,6 +51,33 @@ export const fmtEstimate = (m: number) => {
 export const fmtDateTime = (d: Date | string) =>
   fmt(new Date(d), { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
+// Agendamento interno > "Enviar pelo WhatsApp": reserva + sinal, com o código copia e cola sozinho na última linha.
+// `deadline`: hora-limite do sinal (reserva da página pública); sem ela (agendamento interno) não se promete prazo.
+export function pixReservationText(v: {
+  cliente: string;
+  negocio: string;
+  servico: string;
+  startsAt: Date;
+  totalCents: number;
+  depositCents: number;
+  pixPayload: string;
+  link?: string | null;
+  deadline?: string | null;
+}) {
+  return [
+    `Olá ${v.cliente.split(" ")[0]}! Seu horário no ${v.negocio} está reservado:`,
+    v.servico,
+    fmtDateTime(v.startsAt),
+    `Total: ${brl(v.totalCents)}`,
+    "",
+    `Para confirmar, pague o sinal de ${brl(v.depositCents)} por Pix e envie o comprovante por aqui` + (v.link ? ` ou pelo link: ${v.link}` : "") + ".",
+    v.deadline ? `A vaga fica reservada até ${v.deadline}.` : "Envie o comprovante antes do horário do atendimento.",
+    "",
+    "Pix copia e cola:",
+    v.pixPayload,
+  ].join("\n");
+}
+
 // Máscara de digitação (sem DDI): 19997939514 -> (19) 99793-9514; aceita fixo (10 dígitos) e colado com +55.
 export function maskPhone(v: string) {
   let d = v.replace(/\D/g, "");
