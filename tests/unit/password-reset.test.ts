@@ -385,6 +385,75 @@ describe("requestPasswordReset (esqueci minha senha, depois da resposta 204)", (
 
 describe("sendResetLink (provedores)", () => {
   const msg = { email: "ana@local.test", name: "Ana", link: "https://agenda.exemplo.com/login/redefinir?token=SEGREDO" };
+  // Por padrão o e-mail não está configurado (nem com a chave do .env da máquina) e a rede é proibida.
+  beforeEach(() => {
+    vi.stubEnv("RESEND_API_KEY", "");
+    vi.stubEnv("EMAIL_FROM", "");
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("rede proibida nos testes"); }));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const configureEmail = (reply: () => Promise<Response>) => {
+    vi.stubEnv("RESEND_API_KEY", "re_chave_de_teste");
+    vi.stubEnv("EMAIL_FROM", "Bem-vindo Agenda <nao-responda@exemplo.com>");
+    const fetchMock = vi.fn(reply);
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  };
+
+  it("e-mail configurado: manda pelo Resend para o e-mail de login e não usa o WhatsApp", async () => {
+    state.whatsappOk = true;
+    const fetchMock = configureEmail(async () => new Response(JSON.stringify({ id: "abc" }), { status: 200 }));
+    expect(await sendResetLink(msg)).toBe("email");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://api.resend.com/emails");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer re_chave_de_teste");
+    const body = JSON.parse(String(init.body));
+    expect(body.from).toBe("Bem-vindo Agenda <nao-responda@exemplo.com>");
+    expect(body.to).toEqual(["ana@local.test"]);
+    expect(body.subject).toContain("Redefinição de senha");
+    expect(body.text).toContain(msg.link);
+    expect(body.text).toContain("30 minutos");
+    expect(body.html).toContain(`href="${msg.link}"`);
+    expect(state.sent).toHaveLength(0);
+  });
+
+  it("nome com HTML é escapado no corpo do e-mail", async () => {
+    const fetchMock = configureEmail(async () => new Response("{}", { status: 200 }));
+    await sendResetLink({ ...msg, name: '<script>alert("x")</script>' });
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body));
+    expect(body.html).not.toContain("<script>");
+    expect(body.html).toContain("&lt;script&gt;");
+  });
+
+  it("Resend recusa (domínio não verificado): cai para o WhatsApp e o log não traz chave nem link", async () => {
+    state.whatsappOk = true;
+    configureEmail(async () => new Response(JSON.stringify({ statusCode: 403, name: "validation_error", message: "The domain is not verified." }), { status: 403 }));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await sendResetLink(msg)).toBe("whatsapp");
+    expect(error).toHaveBeenCalledTimes(1);
+    const logged = String(error.mock.calls[0][0]);
+    expect(logged).toContain("403");
+    expect(logged).toContain("not verified");
+    expect(logged).not.toContain("re_chave_de_teste");
+    expect(logged).not.toContain("SEGREDO");
+  });
+
+  it("falha de rede no Resend e WhatsApp desconectado: o link sai no log do servidor", async () => {
+    configureEmail(async () => { throw new Error("ECONNRESET"); });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(await sendResetLink(msg)).toBe("console");
+    expect(String(warn.mock.calls[0][0])).toContain(msg.link);
+  });
+
+  it("só a chave, sem EMAIL_FROM: nem chama o Resend", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_chave_de_teste");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(await sendResetLink(msg)).toBe("console");
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
 
   it("WhatsApp conectado: manda o link ao telefone do estúdio e o histórico não guarda o link", async () => {
     state.whatsappOk = true;

@@ -7,6 +7,7 @@
 #   WA_AKG_API_KEY        chave wag_... gerada no painel do WA-AKG (Settings > API Keys) depois do 1º deploy
 #   SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD   primeiro administrador do app (senha com 12+ caracteres)
 #   WA_AKG_ADMIN_EMAIL / WA_AKG_ADMIN_PASSWORD   login do painel do WA-AKG
+#   RESEND_API_KEY / EMAIL_FROM   opcionais: envio do link de "Esqueci minha senha" por e-mail (Resend)
 # Senhas internas (bancos, segredos) são geradas pelo próprio Coolify (variáveis SERVICE_PASSWORD_* / SERVICE_BASE64_*).
 services:
   app:
@@ -23,6 +24,8 @@ services:
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@example.com}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
       SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Administrador}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
       TZ: America/Sao_Paulo
     expose:
       - "3000"

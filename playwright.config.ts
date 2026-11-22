@@ -32,6 +32,9 @@ export default defineConfig({
       DIRECT_URL: TEST_DB,
       APP_ORIGIN: ORIGIN,
       BOOKING_RATE_LIMIT: "1000", // os testes criam muitas reservas do mesmo IP; em produção vale o padrão (10 / 10 min)
+      // Os testes nunca enviam e-mail de verdade, mesmo com a chave do Resend no .env: o link sai no log, como antes.
+      RESEND_API_KEY: "",
+      EMAIL_FROM: "",
     },
   },
 });

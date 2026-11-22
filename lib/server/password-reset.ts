@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { passwordSchema } from "@/lib/validation";
 import { hashPassword } from "./auth";
 import { db, getBusiness } from "./db";
+import { emailConfigured, escapeHtml, sendEmail } from "./email";
 import { HttpError, rateLimit } from "./http";
 import { sendText } from "./whatsapp";
 
@@ -102,11 +103,31 @@ export async function resetPasswordWithToken(token: string, password: string) {
 }
 
 // --- Envio do link -------------------------------------------------------------------------------------------
-// Provedores plugáveis: para enviar por e-mail depois, acrescente "email" aqui e em `providers`.
-export type ResetProvider = "whatsapp" | "console";
+// Provedores na ordem de preferência: e-mail da própria pessoa (Resend), WhatsApp do estúdio e, por último, o log.
+export type ResetProvider = "email" | "whatsapp" | "console";
 type ResetMessage = { email: string; name: string; link: string };
 
 const providers: Record<ResetProvider, (m: ResetMessage) => Promise<boolean>> = {
+  // E-mail para o endereço de login, pelo Resend. Sem RESEND_API_KEY/EMAIL_FROM, ou se o Resend recusar
+  // (ex.: domínio ainda não verificado), devolve false e o próximo provedor assume.
+  async email(m) {
+    if (!emailConfigured()) return false;
+    const biz = await getBusiness();
+    const subject = `Redefinição de senha do painel — ${biz.name}`;
+    const intro = `Recebemos um pedido para redefinir a senha de acesso ao painel de ${biz.name} (${m.email}).`;
+    const rule = `O link vale ${RESET_TTL_MIN} minutos e só pode ser usado uma vez.`;
+    const ignore = "Se não foi você quem pediu, ignore este e-mail: sua senha continua a mesma.";
+    const text = [`Olá, ${m.name}.`, "", intro, "Abra o link abaixo para criar uma nova senha:", m.link, "", rule, ignore].join("\n");
+    const e = escapeHtml;
+    const html = [
+      `<p>Olá, ${e(m.name)}.</p>`,
+      `<p>${e(intro)}</p>`,
+      `<p><a href="${e(m.link)}" style="display:inline-block;padding:10px 18px;border-radius:8px;background:#111827;color:#ffffff;text-decoration:none;font-weight:600">Criar nova senha</a></p>`,
+      `<p style="font-size:13px;color:#555">Se o botão não abrir, copie este endereço no navegador:<br>${e(m.link)}</p>`,
+      `<p style="font-size:13px;color:#555">${e(rule)}<br>${e(ignore)}</p>`,
+    ].join("\n");
+    return sendEmail({ to: m.email, subject, text, html });
+  },
   // WhatsApp do próprio estúdio (Business.phone), pela conexão já existente. O histórico de mensagens não guarda o link.
   async whatsapp(m) {
     const biz = await getBusiness();
@@ -128,7 +149,7 @@ const providers: Record<ResetProvider, (m: ResetMessage) => Promise<boolean>> = 
 };
 
 // Tenta os provedores na ordem e devolve o que entregou (ou null se nenhum).
-export async function sendResetLink(m: ResetMessage, order: ResetProvider[] = ["whatsapp", "console"]): Promise<ResetProvider | null> {
+export async function sendResetLink(m: ResetMessage, order: ResetProvider[] = ["email", "whatsapp", "console"]): Promise<ResetProvider | null> {
   for (const p of order) {
     try {
       if (await providers[p](m)) return p;

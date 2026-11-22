@@ -30,16 +30,16 @@ export default function ForgotPasswordPage() {
       <LoginBrand subtitle="Recuperar acesso" />
       {done ? (
         // A mesma mensagem para qualquer e-mail: a tela não revela quem tem acesso ao painel
-        // nem se o WhatsApp do estúdio estava conectado na hora.
+        // nem por qual canal o link saiu (e-mail, WhatsApp do estúdio ou log do servidor).
         <div role="status" className="card space-y-3 text-sm">
           <h2 className="font-semibold">Pedido recebido</h2>
-          <p>Se este e-mail tiver acesso ao painel, o link para criar uma nova senha foi enviado para o WhatsApp do estúdio. Ele vale 30 minutos e só pode ser usado uma vez.</p>
+          <p>Se este e-mail tiver acesso ao painel, enviamos para ele o link para criar uma nova senha (confira também a caixa de spam). Se o envio por e-mail não estiver disponível, o link vai para o WhatsApp do estúdio. Ele vale 30 minutos e só pode ser usado uma vez.</p>
           <p className="text-muted">Não chegou em alguns minutos? Peça ao suporte o link de redefinição.</p>
           <Link href="/login" className="btn-ghost w-full">Voltar para o login</Link>
         </div>
       ) : (
         <form method="post" onSubmit={submit} className="card space-y-4">
-          <p className="text-sm text-muted">Informe o e-mail que você usa para entrar. O link de redefinição é enviado para o WhatsApp do estúdio.</p>
+          <p className="text-sm text-muted">Informe o e-mail que você usa para entrar. O link de redefinição é enviado para esse e-mail (ou, se o envio por e-mail não estiver disponível, para o WhatsApp do estúdio).</p>
           <div>
             <label className="label" htmlFor="email">E-mail</label>
             <input id="email" name="email" type="email" autoComplete="username" required maxLength={120} className="input" />
