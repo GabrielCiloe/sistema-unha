@@ -3,6 +3,7 @@ import { db } from "@/lib/server/db";
 import { z } from "zod";
 import { handle, HttpError, json } from "@/lib/server/http";
 import { normalizePhone } from "@/lib/server/whatsapp";
+import { autocompleteWhere } from "@/lib/server/customer-search";
 
 export const GET = handle(async (req) => {
   await requireUser();
@@ -13,17 +14,10 @@ export const GET = handle(async (req) => {
   const auto = params.get("autocomplete") === "1";
   if (auto && !q) return json({ customers: [] });
   const digits = q?.replace(/\D/g, "") ?? "";
-  // No autocomplete, só o que foi digitado como telefone (dígitos e máscara) procura por telefone.
-  const phoneLike = digits.length > 0 && /^[\d\s()+\-.]+$/.test(q ?? "");
   const where = !q
     ? {}
     : auto
-      ? {
-          OR: [
-            { name: { contains: q, mode: "insensitive" as const } },
-            ...(phoneLike ? [{ phone: { startsWith: digits } }, { phone: { startsWith: `55${digits}` } }] : []),
-          ],
-        }
+      ? autocompleteWhere(q)
       : { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { phone: { contains: digits || "x" } }] };
   const customers = await db.customer.findMany({
     where,
