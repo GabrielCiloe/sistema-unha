@@ -67,6 +67,18 @@ export const bookingSchema = z.object({
   notes: z.string().trim().max(300).optional(),
 });
 
+// Agendamento interno (painel): mesma reserva da cliente, com as liberdades da dona.
+export const adminBookingSchema = bookingSchema.extend({
+  // Permite agendar para hoje, ignorando a antecedência mínima em dias. Padrão do painel: true.
+  allowToday: z.boolean().default(true),
+  // "Horário fora da grade": hora local (HH:MM) no dia de `startsAt`; substitui a hora de `startsAt`.
+  manualTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Horário inválido (use HH:MM).").optional(),
+  // Sinal recebido em mãos: já confirma o pagamento e o agendamento.
+  markDepositPaid: z.boolean().optional(),
+  // Já envia à cliente, pelo WhatsApp, a reserva com o Pix copia e cola (mesmo efeito de /send-pix).
+  sendPix: z.boolean().optional(),
+});
+
 export const loginSchema = z.object({ email: z.string().trim().email().max(120), password: z.string().min(1).max(200) });
 
 // Verifica assinatura (magic bytes) de PNG / JPEG / PDF.

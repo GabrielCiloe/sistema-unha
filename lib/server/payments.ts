@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { buildPixPayload } from "@/lib/pix";
-import { fmtDateTime, mapsUrl, renderTemplate } from "@/lib/templates";
+import { brl, fmtDateTime, mapsUrl, renderTemplate } from "@/lib/templates";
 import { db, getBusiness } from "./db";
 import { HOLD_MINUTES } from "./slots";
 import { HttpError } from "./http";
@@ -61,6 +61,43 @@ export async function sendConfirmation(appointmentId: string) {
     mapa: mapsUrl(biz),
   });
   await sendText(a.customer.phone, text, { customerId: a.customerId, appointmentId: a.id });
+}
+
+// Agendamento interno: manda à cliente a reserva + o Pix copia e cola do sinal (o código vai numa mensagem só dele,
+// para ser copiado com um toque). Devolve se o WhatsApp entregou; desconectado não é erro, só `false`.
+export async function sendPixMessage(appointmentId: string) {
+  const [biz, a] = await Promise.all([
+    getBusiness(),
+    db.appointment.findUnique({
+      where: { id: appointmentId },
+      include: { customer: true, items: true, payments: { orderBy: { createdAt: "desc" }, take: 1 } },
+    }),
+  ]);
+  if (!a) throw new HttpError(404, "Agendamento não encontrado.");
+  const p = a.payments[0];
+  if (p?.status === "PAID") throw new HttpError(409, "O sinal deste agendamento já foi pago.");
+  if (a.status !== "PENDING_PAYMENT" || !p?.pixPayload || !["PENDING", "REJECTED"].includes(p.status))
+    throw new HttpError(409, "Este agendamento não está aguardando o sinal.");
+  const first = a.customer.name.split(" ")[0];
+  const link = process.env.APP_ORIGIN ? `${process.env.APP_ORIGIN.replace(/\/+$/, "")}/reserva/${a.publicToken}` : null;
+  const text =
+    `Olá ${first}! Seu horário no ${biz.name} está reservado:
+` +
+    `${a.items.map((i) => i.name).join(" + ")}
+` +
+    `${fmtDateTime(a.startsAt)}
+` +
+    `Total: ${brl(a.totalCents)}
+
+` +
+    `Para confirmar, pague o sinal de ${brl(p.amountCents)} por Pix com o código copia e cola da próxima mensagem ` +
+    `e envie o comprovante por aqui` + (link ? ` ou pelo link: ${link}` : "") + `.
+` +
+    (a.holdUntil.getTime() > Date.now() ? `A vaga fica reservada até ${fmtTime(a.holdUntil)}.` : "");
+  const ids = { customerId: a.customerId, appointmentId: a.id };
+  const sent = await sendText(a.customer.phone, text.trim(), ids);
+  // Sem conexão, não insiste na segunda mensagem (ficaria só mais um registro de falha no histórico).
+  return sent ? sendText(a.customer.phone, p.pixPayload, ids) : false;
 }
 
 // Comprovante enviado pelo WhatsApp: vincula à reserva pendente mais recente da cliente (mesmo efeito do botão "Enviar comprovante").
