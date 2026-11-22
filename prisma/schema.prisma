@@ -24,6 +24,12 @@ enum PaymentStatus {
   EXPIRED
 }
 
+// Origem da reserva: pagina publica (cliente) ou painel (agendamento interno feito pela dona).
+enum AppointmentSource {
+  PUBLIC
+  ADMIN
+}
+
 enum MessageDirection {
   IN
   OUT
@@ -144,6 +150,7 @@ model Appointment {
   startsAt       DateTime
   endsAt         DateTime
   status         AppointmentStatus @default(PENDING_PAYMENT)
+  source         AppointmentSource @default(PUBLIC)
   totalCents     Int
   depositCents   Int
   notes          String            @default("")
@@ -161,6 +168,7 @@ model Appointment {
   @@index([startsAt])
   @@index([status])
   @@index([status, holdUntil])
+  @@index([reminderDueAt])
 }
 
 // Preço e duração são copiados do serviço no momento da reserva (histórico imutável).
