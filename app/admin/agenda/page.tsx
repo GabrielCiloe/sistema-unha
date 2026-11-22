@@ -1,9 +1,11 @@
 "use client";
 
-import { CalendarClock, ChevronLeft, ChevronRight, Clock, MessageSquare, UserX, XCircle } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, Clock, MessageSquare, Plus, QrCode, UserX, XCircle } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageTitle } from "@/components/admin-shell";
+import { NewAppointmentModal, type CreatedAppointment } from "@/components/admin/new-appointment-modal";
+import { PixDepositModal } from "@/components/admin/pix-deposit-modal";
 import { Modal } from "@/components/modal";
 import { MonthCalendar, type Day } from "@/components/month-calendar";
 import { ApptBadge, PayBadge } from "@/components/status";
@@ -17,12 +19,13 @@ type Appt = {
   startsAt: string;
   endsAt: string;
   status: string;
+  source?: "PUBLIC" | "ADMIN";
   totalCents: number;
   depositCents: number;
   notes: string;
   customer: { name: string; phone: string };
   items: { name: string }[];
-  payments: { status: string }[];
+  payments: { id: string; status: string; amountCents: number; pixPayload?: string | null }[];
 };
 
 const FILTERS = [
@@ -57,6 +60,14 @@ export default function Agenda() {
   const [resched, setResched] = useState<Appt | null>(null);
   const [showFree, setShowFree] = useState(false);
   const [error, setError] = useState("");
+  // Popup "Novo agendamento": `date` vem do dia aberto na grade. `created` = atendimento recém-criado, que a agenda
+  // abre (e destaca) quando o popup fecha.
+  const [creating, setCreating] = useState<{ date?: string } | null>(null);
+  const [created, setCreated] = useState<CreatedAppointment | null>(null);
+  const [highlight, setHighlight] = useState("");
+  const highlightRef = useRef<HTMLLIElement>(null);
+  // "Pix do sinal" de um atendimento que ainda aguarda o sinal: reabre o copia e cola.
+  const [pixFor, setPixFor] = useState<Appt | null>(null);
 
   // 6 semanas (42 dias) começando no domingo anterior ao dia 1.
   const cells = useMemo(() => {
@@ -101,6 +112,19 @@ export default function Agenda() {
     }
   }
 
+  function closeCreating() {
+    setCreating(null);
+    if (!created) return;
+    setHighlight(created.id);
+    setShowFree(false);
+    setOpen(dayKey(created.startsAt));
+    setCreated(null);
+  }
+
+  useEffect(() => {
+    if (open && highlight) highlightRef.current?.scrollIntoView({ block: "nearest" });
+  }, [open, highlight, data]);
+
   const dayList = open ? (byDay.get(open) ?? []) : [];
   const openLabel = open
     ? new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", weekday: "long", day: "2-digit", month: "long" }).format(new Date(`${open}T12:00:00Z`))
@@ -110,10 +134,13 @@ export default function Agenda() {
     <>
       <PageTitle title="Agenda" />
 
-      <div className="chips mb-4" role="group" aria-label="Filtrar por situação">
-        {FILTERS.map(([v, l]) => (
-          <button key={v} onClick={() => setFilter(v)} aria-pressed={filter === v} className={filter === v ? "btn-primary" : "btn-ghost"}>{l}</button>
-        ))}
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="chips" role="group" aria-label="Filtrar por situação">
+          {FILTERS.map(([v, l]) => (
+            <button key={v} onClick={() => setFilter(v)} aria-pressed={filter === v} className={filter === v ? "btn-primary" : "btn-ghost"}>{l}</button>
+          ))}
+        </div>
+        <button type="button" className="btn-primary shrink-0" onClick={() => setCreating({})}><Plus size={16} /> Novo agendamento</button>
       </div>
       {(error || loadError) && <p role="alert" className="mb-3 text-sm text-red-300">{error || loadError}</p>}
 
@@ -173,17 +200,26 @@ export default function Agenda() {
         {loading && <Skeleton className="mt-3 h-4 w-32" />}
       </section>
 
-      {open && (
+      {/* Com outro popup por cima (novo agendamento, Pix), o do dia sai da tela e volta ao fechar: um Esc fecha um só. */}
+      {open && !creating && !pixFor && (
         <Modal
           title={openLabel.charAt(0).toUpperCase() + openLabel.slice(1)}
           onClose={() => {
             setOpen(null);
             setShowFree(false);
+            setHighlight("");
           }}
           footer={
-            <button type="button" className="btn-primary w-full" aria-expanded={showFree} onClick={() => setShowFree((v) => !v)}>
-              <Clock size={16} /> {showFree ? "Ocultar horários disponíveis" : "Ver horários disponíveis"}
-            </button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button type="button" className="btn-ghost w-full" aria-expanded={showFree} onClick={() => setShowFree((v) => !v)}>
+                <Clock size={16} /> {showFree ? "Ocultar horários disponíveis" : "Ver horários disponíveis"}
+              </button>
+              {open >= today && (
+                <button type="button" className="btn-primary w-full" onClick={() => setCreating({ date: open })}>
+                  <Plus size={16} /> Novo agendamento
+                </button>
+              )}
+            </div>
           }
         >
           {showFree && <FreePeriods date={open} />}
@@ -192,7 +228,7 @@ export default function Agenda() {
           ) : (
             <ul className="space-y-3">
               {dayList.map((a) => (
-                <li key={a.id} className="rounded-xl border border-line bg-background p-3.5">
+                <li key={a.id} ref={a.id === highlight ? highlightRef : undefined} className={`rounded-xl border bg-background p-3.5 ${a.id === highlight ? "border-brand ring-2 ring-brand/40" : "border-line"}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-semibold">{time(a.startsAt)} – {time(a.endsAt)}</p>
@@ -202,6 +238,7 @@ export default function Agenda() {
                     <div className="flex shrink-0 flex-col items-end gap-1">
                       <ApptBadge status={a.status} />
                       {a.payments[0] && <PayBadge status={a.payments[0].status} />}
+                      {a.source === "ADMIN" && <span className="badge bg-brand/20 text-brand-soft" title="Agendado pelo painel">interno</span>}
                     </div>
                   </div>
                   <p className="mt-2 text-sm text-muted">{a.items.map((i) => i.name).join(" + ")}</p>
@@ -210,6 +247,9 @@ export default function Agenda() {
 
                   <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
                     <Link className="btn-ghost px-3 py-2" href={`/admin/whatsapp?phone=${a.customer.phone}`}><MessageSquare size={14} /> Conversar</Link>
+                    {a.status === "PENDING_PAYMENT" && a.payments[0]?.pixPayload && ["PENDING", "REJECTED"].includes(a.payments[0].status) && (
+                      <button className="btn-ghost px-3 py-2" onClick={() => setPixFor(a)}><QrCode size={14} /> Pix do sinal</button>
+                    )}
                     {["PENDING_PAYMENT", "CONFIRMED"].includes(a.status) && (
                       <button className="btn-ghost px-3 py-2" onClick={() => setResched(a)}><CalendarClock size={14} /> Reagendar</button>
                     )}
@@ -225,6 +265,33 @@ export default function Agenda() {
             </ul>
           )}
         </Modal>
+      )}
+
+      {creating && (
+        <NewAppointmentModal
+          initialDate={creating.date}
+          onClose={closeCreating}
+          onChanged={(a) => {
+            // Recarrega já no mês do atendimento e sem filtro, para ele aparecer ao fechar o popup.
+            const k = dayKey(a.startsAt);
+            setCursor({ y: Number(k.slice(0, 4)), m: Number(k.slice(5, 7)) - 1 });
+            setFilter("");
+            setCreated(a);
+            reload();
+          }}
+        />
+      )}
+
+      {pixFor && pixFor.payments[0]?.pixPayload && (
+        <PixDepositModal
+          title="Pix do sinal"
+          closeLabel="Voltar à agenda"
+          internal={pixFor.source === "ADMIN"}
+          appointment={pixFor}
+          payment={{ id: pixFor.payments[0].id, amountCents: pixFor.payments[0].amountCents, pixPayload: pixFor.payments[0].pixPayload }}
+          onClose={() => setPixFor(null)}
+          onChanged={reload}
+        />
       )}
 
       {resched && (

@@ -2,7 +2,8 @@ import { z } from "zod";
 import { requireUser } from "@/lib/server/auth";
 import { db, getBusiness } from "@/lib/server/db";
 import { handle, HttpError, json } from "@/lib/server/http";
-import { addDays, availabilityForDays, availableSlots, reasonMessage, todayLocal } from "@/lib/server/slots";
+import { addDays, availabilityForDays, availableSlots, HOLD_MINUTES, reasonMessage, todayLocal } from "@/lib/server/slots";
+import { holdUntilFor } from "@/lib/booking-math";
 import { sendText } from "@/lib/server/whatsapp";
 import { DEFAULT_RESCHEDULE_TEMPLATE } from "@/lib/defaults";
 import { mapsUrl, renderTemplate } from "@/lib/templates";
@@ -55,7 +56,11 @@ export const POST = handle(async (req, ctx) => {
 
   const end = new Date(start.getTime() + duration * 60_000);
   // Lembrete volta a ser planejado para a nova data.
-  await db.appointment.update({ where: { id }, data: { startsAt: start, endsAt: end, reminderDueAt: null, reminderSentAt: null } });
+  // Agendamento interno ainda sem sinal: o prazo da vaga acompanha o novo horário (holdUntil = horário do atendimento).
+  // Sem isto ele ficaria no horário antigo: a vaga nova deixaria de ser bloqueada e o cron cancelaria a reserva antes
+  // do atendimento. Reserva da cliente (PUBLIC) não muda: o prazo de 30 min do sinal continua o mesmo.
+  const hold = a.source === "ADMIN" && a.status === "PENDING_PAYMENT" ? { holdUntil: holdUntilFor("ADMIN", start, Date.now(), HOLD_MINUTES) } : {};
+  await db.appointment.update({ where: { id }, data: { startsAt: start, endsAt: end, reminderDueAt: null, reminderSentAt: null, ...hold } });
 
   const biz = await getBusiness();
   const text = renderTemplate(biz.rescheduleTemplate.trim() || DEFAULT_RESCHEDULE_TEMPLATE, {

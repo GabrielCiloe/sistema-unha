@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AccessSettings } from "@/components/admin/access-settings";
 import { PageTitle } from "@/components/admin-shell";
 import { DayOverrides } from "@/components/day-overrides";
 import { ScheduleEditor } from "@/components/schedule-editor";
@@ -20,7 +21,6 @@ type Biz = {
   returnEnabled: boolean; returnAfterDays: number; returnWindowStart: number; returnWindowEnd: number; returnTemplate: string;
 };
 
-const DAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const toTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 const fromTime = (t: string) => {
   const [h, m] = t.split(":").map(Number);
@@ -55,7 +55,9 @@ export default function Settings() {
   return (
     <>
       <PageTitle title="Configurações" />
-      <form onSubmit={save} className="has-actionbar space-y-6">
+      {/* Acesso e usuários ficam fora do <form>: têm formulários próprios e salvam na hora. */}
+      <div className="has-actionbar space-y-6">
+      <form onSubmit={save} className="space-y-6">
         <section className="card grid gap-4 sm:grid-cols-2">
           <h2 className="font-semibold sm:col-span-2">Estúdio</h2>
           <Field id="name" label="Nome" value={b.name} onChange={(v) => set("name", v)} />
@@ -84,7 +86,7 @@ export default function Settings() {
         <section className="card grid gap-4 sm:grid-cols-2">
           <h2 className="font-semibold sm:col-span-2">Horários</h2>
           <div className="sm:col-span-2">
-            <p className="mb-3 text-xs text-muted">Clique num dia para ajustar só aquela data (folga, feriado ou horário diferente do padrão). "Aplicar à semana inteira" copia o horário para a semana toda. Esses ajustes são salvos na hora.</p>
+            <p className="mb-3 text-xs text-muted">Clique num dia para ajustar só aquela data (folga, feriado ou horário diferente do padrão). &quot;Aplicar à semana inteira&quot; copia o horário para a semana toda. Esses ajustes são salvos na hora.</p>
             <DayOverrides schedule={b.schedule} />
           </div>
           <div className="sm:col-span-2 border-t border-line pt-4">
@@ -190,6 +192,8 @@ export default function Settings() {
           <button className="btn-primary">Salvar configurações</button>
         </div>
       </form>
+      <AccessSettings />
+      </div>
     </>
   );
 }

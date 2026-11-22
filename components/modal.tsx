@@ -5,13 +5,15 @@ import { useEffect, useId, useRef } from "react";
 
 // Popup acessível: Esc e clique no fundo fecham, foco volta ao elemento anterior e fica preso dentro.
 // `top`: para um popup aberto por cima de outro (ex.: motivo da recusa sobre o comprovante).
+// `onDismiss`: se informado, Esc e clique no fundo chamam isto em vez de `onClose` (ex.: confirmar antes de descartar
+// um formulário, ou não fechar). O X continua chamando `onClose`. Sem a prop, tudo fecha como sempre.
 // `footer`: barra fixa no rodapé (botões), enquanto o conteúdo rola; o título e o X ficam fixos no topo.
-export function Modal({ title, onClose, children, wide = false, top = false, footer }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean; top?: boolean; footer?: React.ReactNode }) {
+export function Modal({ title, onClose, children, wide = false, top = false, footer, onDismiss }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean; top?: boolean; footer?: React.ReactNode; onDismiss?: () => void }) {
   const titleId = useId();
   const box = useRef<HTMLDivElement>(null);
   // Referência estável: o efeito abaixo roda só ao abrir/fechar (senão o foco voltaria ao 1º campo a cada tecla).
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  const closeRef = useRef(onDismiss ?? onClose);
+  closeRef.current = onDismiss ?? onClose;
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;

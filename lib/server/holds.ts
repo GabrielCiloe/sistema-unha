@@ -4,6 +4,7 @@ import { blockingWhere, HOLD_MINUTES } from "./slots";
 import { sendText } from "./whatsapp";
 
 // Prazo do sinal: cada reserva segura a vaga até `holdUntil` (30 min ao agendar; renovado por 30 min a cada recusa).
+// Agendamento interno (source ADMIN): `holdUntil` = horário do atendimento (holdUntilFor em lib/booking-math).
 // Passado o prazo sem comprovante, a vaga volta para outras clientes e a reserva é expirada com aviso.
 const MIN = 60_000;
 export const newHold = (from = Date.now()) => new Date(from + HOLD_MINUTES * MIN);
@@ -39,7 +40,9 @@ export async function expireHolds(max = 20) {
     orderBy: { holdUntil: "asc" },
     take: max,
   });
-  for (const a of due) await expireAppointment(a);
+  // Agendamento interno que chegou ao horário sem sinal: a vaga é liberada sem mensagem automática à cliente
+  // (foi a dona quem marcou e é ela quem trata com a cliente).
+  for (const a of due) await expireAppointment(a, { notify: a.source !== "ADMIN" });
   return due.length;
 }
 

@@ -11,6 +11,8 @@
     "db:migrate": "prisma migrate deploy",
     "db:seed": "node --env-file=.env prisma/seed.mjs",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test:unit": "vitest run",
     "test:db:setup": "node --env-file=.env scripts/setup-test-db.mjs",
     "test": "playwright test"
   },
@@ -26,13 +28,17 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.7",
     "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^15.5.28",
     "prisma": "^6.19.2",
     "tailwindcss": "^4.0.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.7"
   }
 }

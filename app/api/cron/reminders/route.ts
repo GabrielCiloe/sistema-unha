@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { db, getBusiness } from "@/lib/server/db";
+import { getBusiness } from "@/lib/server/db";
 import { settlePastAppointments } from "@/lib/server/appointments";
 import { handle, HttpError, json } from "@/lib/server/http";
 import { expireHolds } from "@/lib/server/holds";

@@ -31,6 +31,8 @@ export const GET = handle(async (_req, ctx) => {
       depositCents: a.depositCents,
       customerName: a.customer.name.split(" ")[0],
       items: a.items.map((i) => ({ name: i.name, priceCents: i.priceCents })),
+      // Só no agendamento interno (feito pela dona): ali `holdUntil` é o horário do atendimento, não um prazo de 30 min.
+      ...(a.source === "ADMIN" ? { internal: true } : {}),
     },
     payment: p && {
       id: p.id,

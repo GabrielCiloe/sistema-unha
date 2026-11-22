@@ -67,7 +67,43 @@ export const bookingSchema = z.object({
   notes: z.string().trim().max(300).optional(),
 });
 
+// Agendamento interno (painel): mesma reserva da cliente, com as liberdades da dona.
+export const adminBookingSchema = bookingSchema.extend({
+  // Permite agendar para hoje, ignorando a antecedência mínima em dias. Padrão do painel: true.
+  allowToday: z.boolean().default(true),
+  // "Horário fora da grade": hora local (HH:MM) no dia de `startsAt`; substitui a hora de `startsAt`.
+  manualTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Horário inválido (use HH:MM).").optional(),
+  // Sinal recebido em mãos: já confirma o pagamento e o agendamento.
+  markDepositPaid: z.boolean().optional(),
+  // Já envia à cliente, pelo WhatsApp, a reserva com o Pix copia e cola (mesmo efeito de /send-pix).
+  sendPix: z.boolean().optional(),
+});
+
 export const loginSchema = z.object({ email: z.string().trim().email().max(120), password: z.string().min(1).max(200) });
+
+// Política de senha do painel (única para todo o sistema): troca, redefinição e senha inicial gerada.
+export const PASSWORD_MIN = 8;
+export const PASSWORD_HINT = `Mínimo de ${PASSWORD_MIN} caracteres, com pelo menos uma letra e um número.`;
+export const passwordSchema = z
+  .string()
+  .min(PASSWORD_MIN, `A senha precisa ter pelo menos ${PASSWORD_MIN} caracteres.`)
+  .max(200, "A senha é longa demais.")
+  .regex(/\p{L}/u, "A senha precisa ter pelo menos uma letra.")
+  .regex(/\d/, "A senha precisa ter pelo menos um número.");
+
+// Primeiro problema da senha (ou null se atende à política). Usado nos formulários antes de enviar.
+export const passwordProblem = (password: string) => passwordSchema.safeParse(password).error?.issues[0]?.message ?? null;
+
+const emailField = z.string().trim().toLowerCase().email("E-mail inválido.").max(120);
+
+export const changePasswordSchema = z.object({ currentPassword: z.string().min(1).max(200), newPassword: passwordSchema });
+export const forgotPasswordSchema = z.object({ email: emailField });
+export const resetPasswordSchema = z.object({ token: z.string().min(20).max(200), password: passwordSchema });
+
+// Usuários do painel. A senha inicial é gerada pelo servidor (nunca vem do formulário).
+export const userCreateSchema = z.object({ name: z.string().trim().min(2, "Informe o nome.").max(80), email: emailField });
+export const userUpdateSchema = userCreateSchema.partial().refine((u) => u.name !== undefined || u.email !== undefined, "Nada para alterar.");
+export const resetLinkSchema = z.object({ send: z.boolean().optional() });
 
 // Verifica assinatura (magic bytes) de PNG / JPEG / PDF.
 export function sniffProof(buf: Buffer): "image/png" | "image/jpeg" | "application/pdf" | null {

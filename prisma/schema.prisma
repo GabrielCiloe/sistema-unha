@@ -24,6 +24,12 @@ enum PaymentStatus {
   EXPIRED
 }
 
+// Origem da reserva: pagina publica (cliente) ou painel (agendamento interno feito pela dona).
+enum AppointmentSource {
+  PUBLIC
+  ADMIN
+}
+
 enum MessageDirection {
   IN
   OUT
@@ -36,6 +42,20 @@ model User {
   passwordHash String
   createdAt    DateTime  @default(now())
   sessions     Session[]
+  passwordResets PasswordReset[]
+}
+
+// Pedido de redefinicao de senha: so o hash SHA-256 do token fica no banco; expira em 30 min e vale uma vez.
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model Session {
@@ -144,6 +164,7 @@ model Appointment {
   startsAt       DateTime
   endsAt         DateTime
   status         AppointmentStatus @default(PENDING_PAYMENT)
+  source         AppointmentSource @default(PUBLIC)
   totalCents     Int
   depositCents   Int
   notes          String            @default("")
@@ -161,6 +182,7 @@ model Appointment {
   @@index([startsAt])
   @@index([status])
   @@index([status, holdUntil])
+  @@index([reminderDueAt])
 }
 
 // Preço e duração são copiados do serviço no momento da reserva (histórico imutável).

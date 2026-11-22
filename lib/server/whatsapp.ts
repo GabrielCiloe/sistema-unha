@@ -104,11 +104,12 @@ export async function sessionQr(id: string): Promise<string | null> {
   }
 }
 
-export async function sendText(phone: string, text: string, opts: { customerId?: string; appointmentId?: string } = {}) {
+// `logBody`: texto gravado no histórico no lugar do conteúdo real (mensagens com segredo, ex.: link de redefinição de senha).
+export async function sendText(phone: string, text: string, { logBody, ...opts }: { customerId?: string; appointmentId?: string; logBody?: string } = {}) {
   const biz = await getBusiness();
   const log = (status: string, error?: string) =>
     db.messageLog.create({
-      data: { direction: "OUT", phone: normalizePhone(phone), body: text, status, error, ...opts },
+      data: { direction: "OUT", phone: normalizePhone(phone), body: logBody ?? text, status, error, ...opts },
     });
   if (!biz.waSessionId) {
     await log("SKIPPED", "Nenhuma sessão WhatsApp selecionada.");
