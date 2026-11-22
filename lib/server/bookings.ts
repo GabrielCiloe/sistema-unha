@@ -5,6 +5,7 @@ import { fromTime, planRanges, rangesForDate } from "@/lib/schedule";
 import { normalizePhone, phoneVariants } from "./whatsapp";
 import { createDepositPayment } from "./payments";
 import { newHold } from "./holds";
+import { bookingTotals } from "@/lib/booking-math";
 
 // Opções do agendamento interno (painel). Sem elas, valem as regras da página pública.
 export type BookingOpts = {
@@ -50,15 +51,8 @@ export async function createBooking(
   // Antecedencia minima em dias (regra do estudio), conferida tambem no servidor.
   if (!opts.ignoreLead && startsAt < leadStart(biz)) throw new HttpError(400, reasonMessage("too_soon", 0, biz));
 
-  // Manutencao: cada unha faltando soma o preco por unha do servico ao total (e, por consequencia, ao sinal).
-  const lines = services.map((s) => {
-    const missing = s.missingNailPriceCents > 0 ? Math.max(0, Math.min(10, Math.floor(input.missingNails?.[s.id] ?? 0))) : 0;
-    const extra = missing * s.missingNailPriceCents;
-    return { s, missing, priceCents: s.priceCents + extra, name: missing > 0 ? `${s.name} (${missing} ${missing === 1 ? "unha faltando" : "unhas faltando"})` : s.name };
-  });
-  const durationMin = services.reduce((s, x) => s + x.durationMin, 0);
-  const totalCents = lines.reduce((s, x) => s + x.priceCents, 0);
-  const depositCents = Math.max(1, Math.round((totalCents * biz.depositPercent) / 100));
+  // Linhas por serviço (com unhas faltando), total, duração e sinal: contas puras em lib/booking-math.
+  const { lines, durationMin, totalCents, depositCents } = bookingTotals(services, biz.depositPercent, input.missingNails);
   const endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
 
   // O horário precisa estar dentro do expediente de um dia de atendimento (não confia só no que a tela ofereceu).
