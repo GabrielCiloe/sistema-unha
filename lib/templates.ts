@@ -33,6 +33,21 @@ export function renderTemplate(
 
 export const brl = (cents: number) => (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+// 120 -> "2h", 90 -> "1h30", 45 -> "45 min"
+export const fmtDuration = (m: number) => {
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return h === 0 ? `${r} min` : r === 0 ? `${h}h` : `${h}h${String(r).padStart(2, "0")}`;
+};
+// 120 -> "2 horas", 90 -> "1h30", 45 -> "45 minutos"
+export const fmtEstimate = (m: number) => {
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  if (h === 0) return `${r} minutos`;
+  if (r === 0) return h === 1 ? "1 hora" : `${h} horas`;
+  return `${h}h${String(r).padStart(2, "0")}`;
+};
+
 export const fmtDateTime = (d: Date | string) =>
   fmt(new Date(d), { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 

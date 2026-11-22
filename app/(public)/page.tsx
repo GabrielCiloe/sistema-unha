@@ -4,7 +4,7 @@ import { Calendar, Clock, Minus, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrandHeader } from "@/components/brand-header";
 import { api } from "@/lib/client";
-import { brl, maskPhone } from "@/lib/templates";
+import { brl, fmtDuration, fmtEstimate, maskPhone } from "@/lib/templates";
 import { InlineSkeleton, PublicSkeleton } from "@/components/skeleton";
 import { MonthCalendar, type Day } from "@/components/month-calendar";
 
@@ -13,21 +13,6 @@ type Info = {
   services: { id: string; name: string; description: string; durationMin: number; priceCents: number; missingNailPriceCents: number }[];
 };
 
-
-// 120 -> "2h", 90 -> "1h30", 45 -> "45 min"
-const fmtDuration = (m: number) => {
-  const h = Math.floor(m / 60);
-  const r = m % 60;
-  return h === 0 ? `${r} min` : r === 0 ? `${h}h` : `${h}h${String(r).padStart(2, "0")}`;
-};
-// 120 -> "2 horas", 90 -> "1h30", 45 -> "45 minutos"
-const fmtEstimate = (m: number) => {
-  const h = Math.floor(m / 60);
-  const r = m % 60;
-  if (h === 0) return `${r} minutos`;
-  if (r === 0) return h === 1 ? "1 hora" : `${h} horas`;
-  return `${h}h${String(r).padStart(2, "0")}`;
-};
 
 const DAYS_AHEAD = 60; // quantos dias de disponibilidade a API devolve (limite dela)
 
