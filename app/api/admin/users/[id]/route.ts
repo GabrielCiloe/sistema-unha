@@ -8,14 +8,22 @@ import { userUpdateSchema } from "@/lib/validation";
 const notFound = () => new HttpError(404, "Usuário não encontrado.");
 
 // Edita nome e/ou e-mail (a senha tem fluxo próprio: trocar a própria ou link de redefinição).
+// Trocar o e-mail cancela, na mesma transação, os links de redefinição pendentes desse usuário.
 export const PATCH = handle(async (req, ctx) => {
   await requireUser();
   const { id } = await ctx.params;
   const data = userUpdateSchema.parse(await req.json());
-  const user = await db.user.update({ where: { id }, data, select: userSelect }).catch((e) => {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") throw notFound();
-    return emailTaken(e);
-  });
+  const user = await db
+    .$transaction(async (tx) => {
+      const current = await tx.user.findUnique({ where: { id }, select: { email: true } });
+      if (!current) throw notFound();
+      if (data.email !== undefined && data.email !== current.email) await tx.passwordReset.deleteMany({ where: { userId: id } });
+      return tx.user.update({ where: { id }, data, select: userSelect });
+    })
+    .catch((e) => {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") throw notFound();
+      return emailTaken(e);
+    });
   return json({ user });
 });
 
