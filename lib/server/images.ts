@@ -1,5 +1,10 @@
 import sharp from "sharp";
 
+// Logo do estúdio: limite do arquivo enviado e lado máximo do WebP salvo (sem ampliar; a transparência é preservada).
+// 1024 px sobra para o ícone de 512 px do app instalado. (Fica aqui porque route.ts só pode exportar os handlers.)
+export const LOGO_MAX_BYTES = 5 * 1024 * 1024;
+export const LOGO_MAX_SIDE = 1024;
+
 // Só formatos raster por assinatura de arquivo. SVG é recusado de propósito (pode conter script).
 export function sniffImage(b: Buffer): "image/png" | "image/jpeg" | "image/webp" | null {
   if (b.length > 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
