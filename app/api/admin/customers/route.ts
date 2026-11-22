@@ -6,11 +6,29 @@ import { normalizePhone } from "@/lib/server/whatsapp";
 
 export const GET = handle(async (req) => {
   await requireUser();
-  const q = new URL(req.url).searchParams.get("q")?.trim();
+  const params = new URL(req.url).searchParams;
+  const q = params.get("q")?.trim();
+  // ?autocomplete=1 (popup "Novo agendamento"): telefone por PREFIXO (só dígitos, com ou sem o DDI 55) ou trecho do nome,
+  // até 8 resultados. Sem o parâmetro, a busca da tela Clientes segue como sempre foi (telefone por trecho, até 200).
+  const auto = params.get("autocomplete") === "1";
+  if (auto && !q) return json({ customers: [] });
+  const digits = q?.replace(/\D/g, "") ?? "";
+  // No autocomplete, só o que foi digitado como telefone (dígitos e máscara) procura por telefone.
+  const phoneLike = digits.length > 0 && /^[\d\s()+\-.]+$/.test(q ?? "");
+  const where = !q
+    ? {}
+    : auto
+      ? {
+          OR: [
+            { name: { contains: q, mode: "insensitive" as const } },
+            ...(phoneLike ? [{ phone: { startsWith: digits } }, { phone: { startsWith: `55${digits}` } }] : []),
+          ],
+        }
+      : { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { phone: { contains: digits || "x" } }] };
   const customers = await db.customer.findMany({
-    where: q ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { phone: { contains: q.replace(/\D/g, "") || "x" } }] } : {},
+    where,
     orderBy: { createdAt: "desc" },
-    take: 200,
+    take: auto ? 8 : 200,
     include: {
       _count: { select: { appointments: true } },
       appointments: { orderBy: { startsAt: "desc" }, take: 1, select: { startsAt: true, status: true } },
