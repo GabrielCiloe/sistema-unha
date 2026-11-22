@@ -11,10 +11,11 @@ const iso = (y: number, m: number, d: number) => new Date(Date.UTC(y, m, d)).toI
 
 // Calendário mensal (Figma "Data"): D S T Q Q S S, dias com vaga em verde, escolhido em círculo rosé,
 // dias de outro mês em cinza claro. Só mostra meses dentro da janela de disponibilidade.
-export function MonthCalendar({ days, value, onChange }: { days: Day[]; value: string; onChange: (d: string) => void }) {
+// `initialMonth` (AAAA-MM, opcional): mês mostrado ao montar quando ainda não há `value` (ex.: data vinda da agenda).
+export function MonthCalendar({ days, value, onChange, initialMonth }: { days: Day[]; value: string; onChange: (d: string) => void; initialMonth?: string }) {
   const today = todayStr();
   const last = days[days.length - 1]?.date ?? today;
-  const [ym, setYm] = useState(() => (value || today).slice(0, 7));
+  const [ym, setYm] = useState(() => (value || initialMonth || today).slice(0, 7));
   const [y, m] = ym.split("-").map(Number);
   const byDate = new Map(days.map((d) => [d.date, d]));
   const first = new Date(Date.UTC(y, m - 1, 1));
