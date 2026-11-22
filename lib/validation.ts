@@ -81,6 +81,30 @@ export const adminBookingSchema = bookingSchema.extend({
 
 export const loginSchema = z.object({ email: z.string().trim().email().max(120), password: z.string().min(1).max(200) });
 
+// Política de senha do painel (única para todo o sistema): troca, redefinição e senha inicial gerada.
+export const PASSWORD_MIN = 8;
+export const PASSWORD_HINT = `Mínimo de ${PASSWORD_MIN} caracteres, com pelo menos uma letra e um número.`;
+export const passwordSchema = z
+  .string()
+  .min(PASSWORD_MIN, `A senha precisa ter pelo menos ${PASSWORD_MIN} caracteres.`)
+  .max(200, "A senha é longa demais.")
+  .regex(/\p{L}/u, "A senha precisa ter pelo menos uma letra.")
+  .regex(/\d/, "A senha precisa ter pelo menos um número.");
+
+// Primeiro problema da senha (ou null se atende à política). Usado nos formulários antes de enviar.
+export const passwordProblem = (password: string) => passwordSchema.safeParse(password).error?.issues[0]?.message ?? null;
+
+const emailField = z.string().trim().toLowerCase().email("E-mail inválido.").max(120);
+
+export const changePasswordSchema = z.object({ currentPassword: z.string().min(1).max(200), newPassword: passwordSchema });
+export const forgotPasswordSchema = z.object({ email: emailField });
+export const resetPasswordSchema = z.object({ token: z.string().min(20).max(200), password: passwordSchema });
+
+// Usuários do painel. A senha inicial é gerada pelo servidor (nunca vem do formulário).
+export const userCreateSchema = z.object({ name: z.string().trim().min(2, "Informe o nome.").max(80), email: emailField });
+export const userUpdateSchema = userCreateSchema.partial().refine((u) => u.name !== undefined || u.email !== undefined, "Nada para alterar.");
+export const resetLinkSchema = z.object({ send: z.boolean().optional() });
+
 // Verifica assinatura (magic bytes) de PNG / JPEG / PDF.
 export function sniffProof(buf: Buffer): "image/png" | "image/jpeg" | "application/pdf" | null {
   if (buf.length > 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";

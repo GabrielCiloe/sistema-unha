@@ -42,12 +42,17 @@ export async function destroySession() {
   jar.delete(COOKIE);
 }
 
-export async function currentUser() {
+// Sessão atual (id + usuário). O id serve para manter só esta sessão ao trocar a senha.
+export async function currentSession() {
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
   const s = await db.session.findUnique({ where: { tokenHash: sha(token) }, include: { user: true } });
   if (!s || s.expiresAt < new Date()) return null;
-  return { id: s.user.id, email: s.user.email, name: s.user.name };
+  return { sessionId: s.id, user: { id: s.user.id, email: s.user.email, name: s.user.name } };
+}
+
+export async function currentUser() {
+  return (await currentSession())?.user ?? null;
 }
 
 export async function requireUser() {
