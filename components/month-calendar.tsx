@@ -60,7 +60,7 @@ export function MonthCalendar({ days, value, onChange }: { days: Day[]; value: s
               type="button"
               role="gridcell"
               disabled={!available}
-              aria-pressed={on}
+              aria-selected={on}
               aria-current={c.date === today ? "date" : undefined}
               title={!available && c.inMonth ? (info?.message ?? undefined) : undefined}
               onClick={() => onChange(c.date)}

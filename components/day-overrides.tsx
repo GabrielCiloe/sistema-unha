@@ -151,7 +151,7 @@ function DayEditor({ date, initial, custom, onClose, onSaved }: { date: string; 
         <T id="d-le" label="Almoço (fim)" value={p.lunchEnd} onChange={(v) => setP({ ...p, lunchEnd: v })} optional />
       </div>
       {invalid && <p className="mt-2 text-xs text-amber-300">O fechamento precisa ser depois da abertura.</p>}
-      <p className="mt-3 text-xs text-muted">Resultado: {summary(p)}. "Aplicar à semana inteira" grava este horário de domingo a sábado desta semana.</p>
+      <p className="mt-3 text-xs text-muted">Resultado: {summary(p)}. &quot;Aplicar à semana inteira&quot; grava este horário de domingo a sábado desta semana.</p>
     </Modal>
   );
 }

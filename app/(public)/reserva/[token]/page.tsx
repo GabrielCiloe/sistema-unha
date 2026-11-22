@@ -5,7 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { use, useEffect, useState } from "react";
 import { BrandHeader } from "@/components/brand-header";
 import { api } from "@/lib/client";
-import { brl, fmtDateTime } from "@/lib/templates";
+import { brl } from "@/lib/templates";
 import { BookingSkeleton } from "@/components/skeleton";
 import { rememberBooking } from "@/components/pwa";
 
