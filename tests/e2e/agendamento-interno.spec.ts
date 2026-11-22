@@ -256,6 +256,10 @@ test("popup: autocomplete por nome e telefone, horário ocupado some, conflito 4
   const done = page.getByRole("dialog", { name: "Agendamento criado" });
   await expect(done).toBeVisible();
   await expect(done).toContainText("Sinal: R$ 13,50");
+  await expect(done).toContainText("A vaga fica reservada até o horário do atendimento");
+  // Esc não fecha a tela do Pix (só Concluir ou o X).
+  await page.keyboard.press("Escape");
+  await expect(done).toBeVisible();
 
   const db = await prisma();
   const manual = await db.appointment.findFirstOrThrow({ where: { customerId: JOANA.stored, status: "PENDING_PAYMENT" } });
@@ -269,6 +273,14 @@ test("popup: autocomplete por nome e telefone, horário ocupado some, conflito 4
   const day = page.getByRole("dialog");
   await expect(day).toContainText("23:10");
   await expect(day.getByText("interno", { exact: true }).first()).toBeVisible();
+
+  // O Pix continua recuperável pela agenda: "Pix do sinal" no atendimento que aguarda o sinal reabre o copia e cola.
+  await day.getByRole("button", { name: "Pix do sinal" }).first().click();
+  const pix = page.getByRole("dialog", { name: "Pix do sinal" });
+  await expect(pix.getByLabel("Pix copia e cola do sinal")).toHaveValue(/^000201.*6304[0-9A-F]{4}$/);
+  await expect(pix.getByRole("button", { name: "Marcar sinal como já recebido" })).toBeVisible();
+  await pix.getByRole("button", { name: "Voltar à agenda" }).click();
+  await expect(page.getByRole("dialog")).toContainText("23:10");
 });
 
 test("popup aberto pelo dia da grade já vem com a data escolhida", async ({ page }) => {

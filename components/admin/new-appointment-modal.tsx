@@ -1,13 +1,13 @@
 "use client";
 
-import { Calendar, CheckCircle2, Clock, Copy, Minus, Plus, Send, UserPlus, X } from "lucide-react";
+import { Calendar, Clock, Minus, Plus, UserPlus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PixDepositModal } from "@/components/admin/pix-deposit-modal";
 import { Modal } from "@/components/modal";
 import { MonthCalendar, type Day } from "@/components/month-calendar";
 import { Skeleton } from "@/components/skeleton";
-import { toast } from "@/components/toast";
-import { api } from "@/lib/client";
-import { brl, fmtDateTime, fmtDuration, fmtEstimate, formatPhone, maskPhone } from "@/lib/templates";
+import { api, ApiError } from "@/lib/client";
+import { brl, fmtDuration, fmtEstimate, formatPhone, maskPhone } from "@/lib/templates";
 
 type Info = {
   business: { depositPercent: number };
@@ -42,7 +42,7 @@ export function NewAppointmentModal({
   // 1) Cliente
   const [q, setQ] = useState("");
   const [found, setFound] = useState<Found[] | null>(null);
-  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState(false);
   const [customer, setCustomer] = useState<Found | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [name, setName] = useState("");
@@ -66,8 +66,6 @@ export function NewAppointmentModal({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState<Saved | null>(null);
-  const [paid, setPaid] = useState(false);
-  const [acting, setActing] = useState("");
 
   const calRef = useRef<HTMLElement>(null);
   const slotsRef = useRef<HTMLElement>(null);
@@ -86,18 +84,15 @@ export function NewAppointmentModal({
   const term = q.trim();
   const searchable = !customer && !isNew && (phoneLike(term) ? digitsOf(term).length >= 2 : term.length >= 2);
   useEffect(() => {
-    if (!searchable) {
-      setFound(null);
-      setSearching(false);
-      return;
-    }
+    // Termo novo: a lista antiga some e fica "Buscando…" até a resposta deste termo chegar.
+    setFound(null);
+    setSearchError(false);
+    if (!searchable) return;
     let cancelled = false;
-    setSearching(true);
     const t = setTimeout(() => {
       api<{ customers: Found[] }>(`/api/admin/customers?autocomplete=1&q=${encodeURIComponent(term)}`)
         .then((r) => !cancelled && setFound(r.customers))
-        .catch(() => !cancelled && setFound([]))
-        .finally(() => !cancelled && setSearching(false));
+        .catch(() => !cancelled && setSearchError(true));
     }, 300);
     return () => {
       cancelled = true;
@@ -154,8 +149,12 @@ export function NewAppointmentModal({
   }, [days]);
   const pickDate = (d: string) => {
     wanted.current = d;
+    setError("");
     setDate(d);
   };
+  // Mês em que o calendário abre: o da data desejada (vinda da agenda ou já escolhida), se estiver na janela oferecida.
+  const wantedMonth = wanted.current.slice(0, 7);
+  const initialMonth = avail?.length && wantedMonth >= avail[0].date.slice(0, 7) && wantedMonth <= avail[avail.length - 1].date.slice(0, 7) ? wantedMonth : undefined;
 
   const shownDays = (avail ?? []).filter((d) => d.reason !== "closed");
   const allBlocked = !manual && avail !== null && shownDays.length > 0 && shownDays.every((d) => !d.available);
@@ -216,90 +215,46 @@ export function NewAppointmentModal({
       setSaved(r);
       onChanged(r.appointment);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro");
-      setRefresh((n) => n + 1); // o horário pode ter sido ocupado: busca a grade de novo
+      if (e instanceof ApiError) {
+        setError(e.message);
+        if (e.status === 409) setRefresh((n) => n + 1); // horário ocupado: busca a grade de novo (o horário escolhido é desmarcado)
+      } else {
+        // Sem resposta do servidor: o agendamento pode ou não ter sido gravado.
+        setError("Sem resposta do servidor. Confira na agenda se o agendamento foi criado antes de tentar de novo.");
+      }
     } finally {
       setBusy(false);
     }
   }
 
-  async function copyPix() {
-    if (!saved) return;
-    try {
-      await navigator.clipboard.writeText(saved.payment.pixPayload);
-      toast("Pix copia e cola copiado.");
-    } catch {
-      toast("Não foi possível copiar. Selecione o código e copie manualmente.", false);
-    }
-  }
-
-  async function sendPix() {
-    if (!saved) return;
-    setActing("send");
-    try {
-      const r = await api<{ whatsappSent: boolean }>(`/api/admin/appointments/${saved.appointment.id}/send-pix`, { method: "POST" });
-      toast(r.whatsappSent ? "Reserva e Pix copia e cola enviados pelo WhatsApp." : "O WhatsApp não está conectado: a mensagem não foi enviada. Copie o código e envie por outro meio.", r.whatsappSent);
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Erro", false);
-    } finally {
-      setActing("");
-    }
-  }
-
-  // Sinal recebido em mãos: mesmo caminho da aprovação em Pagamentos (confirmPayment).
-  async function markPaid() {
-    if (!saved) return;
-    if (!confirm(`Confirmar que o sinal de ${brl(saved.payment.amountCents)} já foi recebido? O agendamento fica confirmado e a cliente é avisada no WhatsApp.`)) return;
-    setActing("paid");
-    try {
-      await api(`/api/admin/payments/${saved.payment.id}`, { method: "POST", body: { action: "approve", confirmedInBank: true } });
-      setPaid(true);
-      onChanged(saved.appointment);
-      toast("Sinal marcado como recebido. Agendamento confirmado.");
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Erro", false);
-    } finally {
-      setActing("");
-    }
-  }
-
-  // 6) Depois de salvar: Pix copia e cola para a dona repassar à cliente.
+  // 6) Depois de salvar: Pix copia e cola para a dona repassar à cliente (Esc e clique no fundo não fecham).
   if (saved) {
-    const a = saved.appointment;
     return (
-      <Modal title="Agendamento criado" onClose={onClose} top footer={<button type="button" className="btn-primary w-full" onClick={onClose}>Concluir</button>}>
-        <div className="rounded-xl border border-line bg-background p-3.5">
-          <p className="font-semibold">{a.customer.name}</p>
-          <p className="font-mono text-xs text-brand-soft">{formatPhone(a.customer.phone)}</p>
-          <p className="mt-1 text-sm text-muted first-letter:uppercase">{fmtDateTime(a.startsAt)}</p>
-          <p className="text-sm text-muted">Sinal: {brl(saved.payment.amountCents)}</p>
-        </div>
-
-        {paid ? (
-          <p role="status" className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3.5 text-sm text-emerald-300">
-            <CheckCircle2 size={18} className="shrink-0" aria-hidden /> Sinal recebido. O agendamento está confirmado.
-          </p>
-        ) : (
-          <>
-            <label className="label mt-4" htmlFor="na-pix">Pix copia e cola do sinal</label>
-            <textarea id="na-pix" readOnly rows={4} value={saved.payment.pixPayload} onFocus={(e) => e.currentTarget.select()} className="input resize-none break-all font-mono text-xs" />
-            <p className="mt-1.5 text-xs text-muted">Envie este código à cliente. Quando ela pagar e mandar o comprovante, ele aparece em Pagamentos.</p>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              <button type="button" className="btn-primary" data-autofocus onClick={copyPix}><Copy size={16} /> Copiar Pix copia e cola</button>
-              <button type="button" className="btn-ghost" disabled={acting !== ""} onClick={sendPix}><Send size={16} /> {acting === "send" ? "Enviando…" : "Enviar pelo WhatsApp"}</button>
-              <button type="button" className="btn-confirm sm:col-span-2" disabled={acting !== ""} onClick={markPaid}><CheckCircle2 size={16} /> {acting === "paid" ? "Confirmando…" : "Marcar sinal como já recebido"}</button>
-            </div>
-          </>
-        )}
-      </Modal>
+      <PixDepositModal
+        title="Agendamento criado"
+        closeLabel="Concluir"
+        sticky
+        internal
+        appointment={saved.appointment}
+        payment={saved.payment}
+        onClose={onClose}
+        onChanged={() => onChanged(saved.appointment)}
+      />
     );
   }
+
+  // Esc ou clique no fundo com algo preenchido: confirma antes de descartar.
+  const dirty = Boolean(q.trim() || customer || isNew || selected.length || notes.trim());
+  const dismiss = () => {
+    if (!dirty || confirm("Descartar este agendamento? O que foi preenchido será perdido.")) onClose();
+  };
 
   const pick = "rounded-xl text-sm font-semibold transition";
   return (
     <Modal
       title="Novo agendamento"
       onClose={onClose}
+      onDismiss={dismiss}
       top
       footer={
         <>
@@ -342,14 +297,12 @@ export function NewAppointmentModal({
                 autoComplete="off"
                 inputMode="search"
                 placeholder="Digite o número ou o nome"
-                role="combobox"
-                aria-expanded={Boolean(found?.length)}
-                aria-controls="na-found"
                 value={q}
                 onChange={(e) => setQ(/^[\d(+]/.test(e.target.value.trimStart()) ? maskPhone(e.target.value) : e.target.value)}
               />
-              <div id="na-found" className="mt-2 space-y-2">
-                {searching && !found && <p className="text-sm text-muted">Buscando…</p>}
+              <div className="mt-2 space-y-2">
+                {searchable && !found && !searchError && <p role="status" className="text-sm text-muted">Buscando…</p>}
+                {searchError && <p role="alert" className="text-sm text-red-300">Não foi possível buscar. Tente de novo.</p>}
                 {found && found.length > 0 && (
                   <ul className="overflow-hidden rounded-xl border border-line" aria-label="Clientes encontradas">
                     {found.map((c) => (
@@ -441,14 +394,14 @@ export function NewAppointmentModal({
             <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Calendar size={16} className="text-brand-soft" aria-hidden /> 3. Data</h3>
             {avail === null && <Skeleton className="h-64 w-full" />}
             {blockedMsg && <p role="alert" className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-300">{blockedMsg}</p>}
-            {avail !== null && <MonthCalendar days={days} value={date} onChange={pickDate} />}
+            {avail !== null && <MonthCalendar days={days} value={date} onChange={pickDate} initialMonth={initialMonth} />}
             {avail !== null && initialDate && !date && wanted.current === initialDate && (
               <p role="status" className="mt-3 text-sm text-muted">
                 {avail.find((d) => d.date === initialDate)?.message ?? `Sem horários livres em ${dayLabel(initialDate)}.`} Escolha outra data{manual ? "" : " ou use um horário fora da grade"}.
               </p>
             )}
             <label className="mt-3 flex items-center gap-2 text-sm">
-              <input type="checkbox" className="size-4 accent-[var(--color-brand)]" checked={manual} onChange={(e) => setManual(e.target.checked)} />
+              <input type="checkbox" className="size-4 accent-[var(--color-brand)]" checked={manual} onChange={(e) => { setError(""); setManual(e.target.checked); }} />
               Horário fora da grade (encaixe)
             </label>
           </section>
@@ -461,7 +414,7 @@ export function NewAppointmentModal({
             {manual ? (
               <div>
                 <label className="label" htmlFor="na-time">Horário fora da grade (HH:MM)</label>
-                <input id="na-time" type="time" className="input max-w-40" value={manualTime} onChange={(e) => setManualTime(e.target.value)} />
+                <input id="na-time" type="time" className="input max-w-40" value={manualTime} onChange={(e) => { setError(""); setManualTime(e.target.value); }} />
                 <p className="mt-1.5 text-xs text-muted">Pode ficar fora do expediente, mas não em cima de outro atendimento nem no passado.</p>
               </div>
             ) : (
@@ -471,7 +424,7 @@ export function NewAppointmentModal({
                 {slots && slots.length > 0 && (
                   <div className="grid grid-cols-3 gap-2 sm:grid-cols-4" role="group" aria-label="Horários">
                     {slots.map((s) => (
-                      <button key={s} type="button" aria-pressed={slot === s} onClick={() => setSlot(s)} className={`${pick} ${slot === s ? "btn-primary" : "btn-ghost"}`}>{hhmm(s)}</button>
+                      <button key={s} type="button" aria-pressed={slot === s} onClick={() => { setError(""); setSlot(s); }} className={`${pick} ${slot === s ? "btn-primary" : "btn-ghost"}`}>{hhmm(s)}</button>
                     ))}
                   </div>
                 )}

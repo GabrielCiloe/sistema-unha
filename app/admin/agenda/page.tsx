@@ -1,10 +1,11 @@
 "use client";
 
-import { CalendarClock, ChevronLeft, ChevronRight, Clock, MessageSquare, Plus, UserX, XCircle } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, Clock, MessageSquare, Plus, QrCode, UserX, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageTitle } from "@/components/admin-shell";
 import { NewAppointmentModal, type CreatedAppointment } from "@/components/admin/new-appointment-modal";
+import { PixDepositModal } from "@/components/admin/pix-deposit-modal";
 import { Modal } from "@/components/modal";
 import { MonthCalendar, type Day } from "@/components/month-calendar";
 import { ApptBadge, PayBadge } from "@/components/status";
@@ -24,7 +25,7 @@ type Appt = {
   notes: string;
   customer: { name: string; phone: string };
   items: { name: string }[];
-  payments: { status: string }[];
+  payments: { id: string; status: string; amountCents: number; pixPayload?: string | null }[];
 };
 
 const FILTERS = [
@@ -65,6 +66,8 @@ export default function Agenda() {
   const [created, setCreated] = useState<CreatedAppointment | null>(null);
   const [highlight, setHighlight] = useState("");
   const highlightRef = useRef<HTMLLIElement>(null);
+  // "Pix do sinal" de um atendimento que ainda aguarda o sinal: reabre o copia e cola.
+  const [pixFor, setPixFor] = useState<Appt | null>(null);
 
   // 6 semanas (42 dias) começando no domingo anterior ao dia 1.
   const cells = useMemo(() => {
@@ -197,7 +200,8 @@ export default function Agenda() {
         {loading && <Skeleton className="mt-3 h-4 w-32" />}
       </section>
 
-      {open && (
+      {/* Com outro popup por cima (novo agendamento, Pix), o do dia sai da tela e volta ao fechar: um Esc fecha um só. */}
+      {open && !creating && !pixFor && (
         <Modal
           title={openLabel.charAt(0).toUpperCase() + openLabel.slice(1)}
           onClose={() => {
@@ -243,6 +247,9 @@ export default function Agenda() {
 
                   <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
                     <Link className="btn-ghost px-3 py-2" href={`/admin/whatsapp?phone=${a.customer.phone}`}><MessageSquare size={14} /> Conversar</Link>
+                    {a.status === "PENDING_PAYMENT" && a.payments[0]?.pixPayload && ["PENDING", "REJECTED"].includes(a.payments[0].status) && (
+                      <button className="btn-ghost px-3 py-2" onClick={() => setPixFor(a)}><QrCode size={14} /> Pix do sinal</button>
+                    )}
                     {["PENDING_PAYMENT", "CONFIRMED"].includes(a.status) && (
                       <button className="btn-ghost px-3 py-2" onClick={() => setResched(a)}><CalendarClock size={14} /> Reagendar</button>
                     )}
@@ -272,6 +279,18 @@ export default function Agenda() {
             setCreated(a);
             reload();
           }}
+        />
+      )}
+
+      {pixFor && pixFor.payments[0]?.pixPayload && (
+        <PixDepositModal
+          title="Pix do sinal"
+          closeLabel="Voltar à agenda"
+          internal={pixFor.source === "ADMIN"}
+          appointment={pixFor}
+          payment={{ id: pixFor.payments[0].id, amountCents: pixFor.payments[0].amountCents, pixPayload: pixFor.payments[0].pixPayload }}
+          onClose={() => setPixFor(null)}
+          onChanged={reload}
         />
       )}
 
