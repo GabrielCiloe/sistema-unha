@@ -213,11 +213,23 @@ test("token de redefinição: sem enumeração de e-mail, expira em 30 min, ante
   expect(await db.passwordReset.count()).toBe(await db.passwordReset.count({ where: { user: { email: { startsWith: "qa-" } } } })); // nada criado para e-mail inexistente
   expect((await anon.post("/api/auth/forgot", { data: { email: "sem-arroba" }, headers: freshIp() })).status()).toBe(400);
 
-  // Um pedido novo apaga o anterior (fica só um token válido por usuário).
+  // Pedido repetido em menos de 2 minutos mantém o link que acabou de chegar (um terceiro não consegue invalidá-lo).
   const firstHash = (await db.passwordReset.findFirstOrThrow({ where: { userId: ids.token } })).tokenHash;
-  await anon.post("/api/auth/forgot", { data: { email: users.token.email }, headers: freshIp() });
+  expect((await anon.post("/api/auth/forgot", { data: { email: users.token.email }, headers: freshIp() })).status()).toBe(204);
+  await new Promise((r) => setTimeout(r, 2500)); // o trabalho roda depois da resposta (after)
+  expect((await db.passwordReset.findMany({ where: { userId: ids.token } })).map((r) => r.tokenHash)).toEqual([firstHash]);
+  // Passada a espera (o teste recua a criação do link no banco), um pedido novo apaga o anterior: fica só um token por usuário.
+  // É o 3º pedido deste e-mail, o último que o limite de 3 por 15 minutos atende.
+  await db.passwordReset.updateMany({ where: { userId: ids.token }, data: { createdAt: new Date(Date.now() - 3 * 60_000) } });
+  expect((await anon.post("/api/auth/forgot", { data: { email: users.token.email }, headers: freshIp() })).status()).toBe(204);
   await expect.poll(async () => (await db.passwordReset.findFirst({ where: { userId: ids.token } }))?.tokenHash, { timeout: 10_000 }).not.toBe(firstHash);
   expect(await db.passwordReset.count({ where: { userId: ids.token } })).toBe(1);
+  // Limite por e-mail: o 4º pedido em 15 minutos responde igual (204), mas não gera link novo, mesmo passada a espera.
+  const thirdHash = (await db.passwordReset.findFirstOrThrow({ where: { userId: ids.token } })).tokenHash;
+  await db.passwordReset.updateMany({ where: { userId: ids.token }, data: { createdAt: new Date(Date.now() - 3 * 60_000) } });
+  expect((await anon.post("/api/auth/forgot", { data: { email: users.token.email }, headers: freshIp() })).status()).toBe(204);
+  await new Promise((r) => setTimeout(r, 2500));
+  expect((await db.passwordReset.findMany({ where: { userId: ids.token } })).map((r) => r.tokenHash)).toEqual([thirdHash]);
 
   // Link gerado pelo painel (devolve o link a quem está logada). Com APP_ORIGIN definido, Host/X-Forwarded-Host
   // forjados não mudam o endereço do link.

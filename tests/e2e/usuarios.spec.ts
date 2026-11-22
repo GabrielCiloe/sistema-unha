@@ -188,3 +188,35 @@ test("API de usuários: exige sessão, não devolve hash, valida entradas e apli
   await fresh.dispose();
   await db.$disconnect();
 });
+
+test("trocar o e-mail de um usuário cancela o link de redefinição pendente; trocar só o nome, não", async ({ request, playwright }) => {
+  const db = await prisma();
+  const target = await db.user.create({ data: { name: "QA Link", email: "qa-link@local.test", passwordHash: hashPassword("Link12345678") } });
+  const anon = await playwright.request.newContext({ baseURL: "http://localhost:3100" });
+  await apiLogin(request);
+  const path = `/api/admin/users/${target.id}`;
+  const issue = async () => new URL((await (await request.post(`${path}/reset-link`, { data: {} })).json()).link).searchParams.get("token")!;
+  const reset = (token: string) => anon.post("/api/auth/reset", { data: { token, password: "NovaLink2031" }, headers: freshIp() });
+  const tryLogin = async (email: string) => (await anon.post("/api/auth/login", { data: { email, password: "Link12345678" }, headers: freshIp() })).status();
+
+  // Gera o link e troca o e-mail: o link antigo deixa de valer (400) e a senha não muda.
+  const old = await issue();
+  expect(await db.passwordReset.count({ where: { userId: target.id } })).toBe(1);
+  expect((await request.patch(path, { data: { email: "qa-link-novo@local.test" } })).status()).toBe(200);
+  expect(await db.passwordReset.count({ where: { userId: target.id } })).toBe(0);
+  const denied = await reset(old);
+  expect(denied.status()).toBe(400);
+  expect((await denied.json()).error).toMatch(/Link inválido ou expirado/);
+  expect(await tryLogin("qa-link-novo@local.test")).toBe(200);
+  expect(await tryLogin("qa-link@local.test")).toBe(401);
+
+  // Trocar só o nome (ou repetir o mesmo e-mail) mantém o link pendente; e-mail recusado (409) também não o apaga.
+  const kept = await issue();
+  expect((await request.patch(path, { data: { name: "QA Link Renomeado" } })).status()).toBe(200);
+  expect((await request.patch(path, { data: { email: "QA-Link-Novo@local.test" } })).status()).toBe(200);
+  expect((await request.patch(path, { data: { email: ADMIN.email } })).status()).toBe(409);
+  expect(await db.passwordReset.count({ where: { userId: target.id } })).toBe(1);
+  expect((await reset(kept)).status()).toBe(204);
+  await anon.dispose();
+  await db.$disconnect();
+});
