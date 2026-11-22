@@ -32,6 +32,12 @@ O `https` é necessário: o cookie de login exige HTTPS e o WA-AKG só aceita we
 | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | login do painel do estúdio (senha com 12+ caracteres) |
 | `WA_AKG_ADMIN_EMAIL` / `WA_AKG_ADMIN_PASSWORD` | login do painel do WA-AKG |
 | `WA_AKG_API_KEY` | deixe vazio agora; preenchido no passo 5 |
+| `RESEND_API_KEY` | opcional: chave "Sending access" do Resend, para mandar o link de "Esqueci minha senha" por e-mail |
+| `EMAIL_FROM` | opcional: remetente de um domínio verificado no Resend, ex.: `Bem-vindo Agenda <nao-responda@bemvindoagenda.com.br>` |
+
+Sem `RESEND_API_KEY` e `EMAIL_FROM`, o link de redefinição vai para o WhatsApp do estúdio (ou para o log do container
+app). Com elas, vai primeiro para o e-mail de login da pessoa; se o Resend recusar (por exemplo, domínio ainda não
+verificado), cai para o WhatsApp e depois para o log.
 
 As senhas dos bancos e os segredos (`SERVICE_PASSWORD_*`, `SERVICE_BASE64_*`) o Coolify gera e guarda sozinho.
 
