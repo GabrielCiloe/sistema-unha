@@ -193,7 +193,7 @@ test("agenda: calendário, cancelamento pelo gestor e concluído automático", a
   const db = new PrismaClient();
   await db.customer.upsert({ where: { phone: "5531977665544" }, update: {}, create: { phone: "5531977665544", name: "Paula Reis" } });
   const past = await db.appointment.create({
-    data: { customerId: "5531977665544", startsAt: new Date(Date.now() - 3 * 86400_000), endsAt: new Date(Date.now() - 3 * 86400_000 + 3600_000), status: "CONFIRMED", totalCents: 5000, depositCents: 1500 },
+    data: { customerId: "5531977665544", startsAt: new Date(Date.now() - 3 * 86400_000), endsAt: new Date(Date.now() - 3 * 86400_000 + 3600_000), status: "CONFIRMED", holdUntil: new Date(Date.now() - 3 * 86400_000), totalCents: 5000, depositCents: 1500 },
   });
   const range = `from=${encodeURIComponent(new Date(Date.now() - 10 * 86400_000).toISOString())}&to=${encodeURIComponent(new Date(Date.now() + 1 * 86400_000).toISOString())}`;
   const listed = await (await page.request.get(`/api/admin/appointments?${range}`)).json();
