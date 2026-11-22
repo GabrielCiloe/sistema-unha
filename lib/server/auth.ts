@@ -16,6 +16,8 @@ export function verifyPassword(password: string, stored: string) {
   const [saltHex, hashHex] = stored.split(":");
   if (!saltHex || !hashHex) return false;
   const expected = Buffer.from(hashHex, "hex");
+  // Hash guardado malformado (não hexadecimal ou curto) nunca confere: sem isto, um hash vazio "conferiria" com qualquer senha.
+  if (expected.length < 32 || expected.length * 2 !== hashHex.length) return false;
   const actual = scryptSync(password, Buffer.from(saltHex, "hex"), expected.length);
   return timingSafeEqual(actual, expected);
 }
