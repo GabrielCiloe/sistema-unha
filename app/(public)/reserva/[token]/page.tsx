@@ -11,7 +11,7 @@ import { rememberBooking } from "@/components/pwa";
 
 type Booking = {
   business: { name: string; address: string; logoUrl: string | null; whatsapp: string | null; mapsUrl: string | null };
-  appointment: { status: string; startsAt: string; holdUntil: string; totalCents: number; depositCents: number; customerName: string; items: { name: string; priceCents: number }[] };
+  appointment: { status: string; startsAt: string; holdUntil: string; totalCents: number; depositCents: number; customerName: string; items: { name: string; priceCents: number }[]; internal?: boolean };
   payment: { id: string; status: string; amountCents: number; pixPayload: string | null; rejectReason: string | null } | null;
 };
 
@@ -128,10 +128,14 @@ export default function BookingStatus({ params }: { params: Promise<{ token: str
                   <Upload size={20} strokeWidth={1.5} /> {uploading ? "Enviando…" : "Enviar comprovante"}
                   <input type="file" accept="image/png,image/jpeg,application/pdf" className="sr-only" disabled={uploading} onChange={(e) => upload(e.target.files?.[0])} />
                 </label>
+                {a.internal ? (
+                  <p className="text-[12px] leading-[1.4] text-ink/35">Foto (PNG ou JPG) ou PDF até 50 MB. Envie o comprovante antes do horário do atendimento.</p>
+                ) : (
                 <p className="text-[12px] leading-[1.4] text-ink/35">
                   Foto (PNG ou JPG) ou PDF até 50 MB. Sua vaga fica reservada até {new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(new Date(a.holdUntil))}
                   {new Date(a.holdUntil).getTime() < Date.now() ? " (prazo encerrado: envie agora, se a vaga ainda estiver livre)" : ""}.
                 </p>
+                )}
               </>
             )}
           </section>
