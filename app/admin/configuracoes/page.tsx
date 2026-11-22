@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AccessSettings } from "@/components/admin/access-settings";
 import { PageTitle } from "@/components/admin-shell";
 import { DayOverrides } from "@/components/day-overrides";
 import { ScheduleEditor } from "@/components/schedule-editor";
@@ -55,7 +56,9 @@ export default function Settings() {
   return (
     <>
       <PageTitle title="Configurações" />
-      <form onSubmit={save} className="has-actionbar space-y-6">
+      {/* Acesso e usuários ficam fora do <form>: têm formulários próprios e salvam na hora. */}
+      <div className="has-actionbar space-y-6">
+      <form onSubmit={save} className="space-y-6">
         <section className="card grid gap-4 sm:grid-cols-2">
           <h2 className="font-semibold sm:col-span-2">Estúdio</h2>
           <Field id="name" label="Nome" value={b.name} onChange={(v) => set("name", v)} />
@@ -190,6 +193,8 @@ export default function Settings() {
           <button className="btn-primary">Salvar configurações</button>
         </div>
       </form>
+      <AccessSettings />
+      </div>
     </>
   );
 }

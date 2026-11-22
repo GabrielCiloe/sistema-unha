@@ -1,15 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
+import { LoginBrand } from "@/components/login-brand";
+import { toast, Toaster } from "@/components/toast";
 import { api } from "@/lib/client";
 
 export default function LoginPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [brand, setBrand] = useState<{ name: string; logoUrl: string | null } | null>(null);
 
+  // Volta de /login/redefinir: avisa que a senha foi trocada e limpa o parâmetro da URL.
   useEffect(() => {
-    api<{ business: { name: string; logoUrl: string | null } }>("/api/public/info").then((r) => setBrand(r.business)).catch(() => {});
+    if (new URLSearchParams(window.location.search).get("senha") !== "redefinida") return;
+    toast("Senha redefinida! Entre com a nova senha.");
+    window.history.replaceState(null, "", "/login");
   }, []);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -28,19 +33,7 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-4">
-      {/* Mesma logo da tela da cliente (BrandHeader): 350 px, centralizada, sem moldura. */}
-      <div className="mb-8 flex flex-col items-center gap-3 text-center">
-        {brand?.logoUrl ? (
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={brand.logoUrl} alt={`Logo de ${brand.name}`} className="mx-auto h-auto w-[350px] max-w-full object-contain" />
-            <h1 className="sr-only">{brand.name}</h1>
-          </>
-        ) : (
-          <h1 className="text-3xl font-semibold text-accent">{brand?.name ?? "Painel do estúdio"}</h1>
-        )}
-        <p className="text-xs text-muted">Acesso do administrador</p>
-      </div>
+      <LoginBrand subtitle="Acesso do administrador" />
       {/* method=post: se o JS ainda não carregou, as credenciais nunca vão na URL (GET). */}
       <form method="post" onSubmit={submit} className="card space-y-4">
         <div>
@@ -53,7 +46,11 @@ export default function LoginPage() {
         </div>
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
         <button disabled={busy} className="btn-primary w-full">{busy ? "Entrando…" : "Entrar"}</button>
+        <p className="text-center text-sm">
+          <Link href="/login/recuperar" className="text-brand-soft underline">Esqueci minha senha</Link>
+        </p>
       </form>
+      <Toaster />
     </main>
   );
 }
