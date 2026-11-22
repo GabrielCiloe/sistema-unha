@@ -44,10 +44,16 @@ export async function confirmPayment(paymentId: string) {
     const p = await tx.payment.findUnique({ where: { id: paymentId } });
     if (!p) throw new HttpError(404, "Pagamento não encontrado.");
     if (p.status === "PAID") return false;
-    const a = await tx.appointment.findUnique({ where: { id: p.appointmentId }, select: { id: true, startsAt: true, endsAt: true } });
+    const a = await tx.appointment.findUnique({ where: { id: p.appointmentId }, select: { id: true, startsAt: true, endsAt: true, status: true, holdUntil: true } });
     if (!a) throw new HttpError(404, "Agendamento não encontrado.");
-    const clash = await tx.appointment.findFirst({ where: { ...blockingWhere(a.startsAt, a.endsAt, biz.bufferMinutes), id: { not: a.id } }, select: { id: true } });
-    if (clash) throw new HttpError(409, SLOT_TAKEN_MESSAGE);
+    // A reserva que ainda segura a própria vaga (mesma regra de blockingWhere: prazo do sinal correndo ou comprovante em
+    // análise) não confere conflito: ninguém pôde reservar por cima dela. Conferir mesmo assim recusaria comprovantes
+    // legítimos quando a pausa entre atendimentos é aumentada depois de reservas vizinhas já feitas.
+    const holding = a.status === "CONFIRMED" || (a.status === "PENDING_PAYMENT" && (a.holdUntil.getTime() > Date.now() || p.status === "IN_REVIEW"));
+    if (!holding) {
+      const clash = await tx.appointment.findFirst({ where: { ...blockingWhere(a.startsAt, a.endsAt, biz.bufferMinutes), id: { not: a.id } }, select: { id: true } });
+      if (clash) throw new HttpError(409, SLOT_TAKEN_MESSAGE);
+    }
     await tx.payment.update({ where: { id: p.id }, data: { status: "PAID", paidAt: new Date(), reviewedAt: new Date() } });
     await tx.appointment.update({ where: { id: p.appointmentId }, data: { status: "CONFIRMED" } });
     return p.appointmentId;

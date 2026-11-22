@@ -171,7 +171,31 @@ describe("confirmPayment", () => {
     expect(state.appt!.status).toBe("CONFIRMED");
   });
 
+  it("reserva que ainda segura a própria vaga não confere conflito (prazo correndo ou comprovante em análise)", async () => {
+    // Vizinha dentro da pausa (ex.: a dona aumentou a pausa depois das reservas): não pode barrar um comprovante legítimo.
+    state.clash = true;
+    expect(await confirmPayment("p1")).toBe(true);
+    expect(state.clashWhere).toBeNull();
+
+    state.appt!.status = "PENDING_PAYMENT";
+    state.appt!.holdUntil = new Date(Date.now() - HOUR); // prazo vencido, mas o comprovante chegou e está em análise
+    state.payment!.status = "IN_REVIEW";
+    expect(await confirmPayment("p1")).toBe(true);
+    expect(state.clashWhere).toBeNull();
+  });
+
+  it("prazo do sinal vencido sem comprovante: confere conflito antes de confirmar", async () => {
+    state.appt!.holdUntil = new Date(Date.now() - HOUR);
+    state.clash = true;
+    await expect(confirmPayment("p1")).rejects.toMatchObject({ status: 409, message: SLOT_TAKEN_MESSAGE });
+    expect(state.appt!.status).toBe("PENDING_PAYMENT");
+    state.clash = false;
+    expect(await confirmPayment("p1")).toBe(true);
+  });
+
   it("procura conflito no horário do próprio atendimento, sem contar ele mesmo e com a pausa do estúdio", async () => {
+    state.appt!.status = "CANCELLED";
+    state.payment!.status = "EXPIRED";
     await confirmPayment("p1");
     const where = state.clashWhere as { id: { not: string }; startsAt: { lt: Date }; endsAt: { gt: Date } };
     expect(where.id).toEqual({ not: "a1" });
